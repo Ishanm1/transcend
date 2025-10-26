@@ -1,0 +1,11 @@
+
+> transcend-app@1.0.0 start
+> expo start --clear
+
+Starting project at /Users/ishanmistry/transcend
+› Port 8081 is running this app in another window
+  /Users/ishanmistry/transcend (pid 34296)
+Input is required, but 'npx expo' is in non-interactive mode.
+Required input:
+> Use port 8083 instead?
+› Skipping dev server

@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { GlassView } from 'expo-glass-effect';
 
-const SessionTimer = ({ time, circleSize }) => {
+const SessionTimer = ({ time, cycleCount, circleSize }) => {
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -9,38 +10,61 @@ const SessionTimer = ({ time, circleSize }) => {
   };
 
   return (
-    <View style={[styles.container, { width: circleSize }]}>
-      <Text style={styles.label}>SESSION</Text>
-      <Text style={styles.time}>{formatTime(time)}</Text>
-    </View>
+    <GlassView 
+      glassEffectStyle="regular"
+      style={[styles.container, { width: circleSize }]}
+    >
+      {/* Session Column */}
+      <View style={styles.column}>
+        <Text style={styles.label}>SESSION</Text>
+        <Text style={styles.value}>{formatTime(time)}</Text>
+      </View>
+      
+      {/* Vertical Divider */}
+      <View style={styles.divider} />
+      
+      {/* Cycles Column */}
+      <View style={styles.column}>
+        <Text style={styles.label}>CYCLES</Text>
+        <Text style={styles.value}>{cycleCount}</Text>
+      </View>
+    </GlassView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 120,
+    bottom: 100,
     alignSelf: 'center',
-    height: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    height: 70,
     borderRadius: 4,
     borderWidth: 0.3,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    backdropFilter: 'blur(10px)',
     zIndex: 90,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
+  },
+  column: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  divider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.5)',
     letterSpacing: 2,
+    marginBottom: 4,
   },
-  time: {
+  value: {
     fontSize: 24,
     fontWeight: '300',
     color: '#ffffff',

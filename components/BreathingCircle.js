@@ -1,47 +1,42 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { GlassView } from 'expo-glass-effect';
 
 const { width } = Dimensions.get('window');
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) => {
+const BreathingCircle = ({ 
+  duration = 5, 
+  isActive = false, 
+  onStart, 
+  onStop, 
+  onCycleComplete,
+  onThemeToggle, 
+  currentTheme = 'modern',
+  isMuted = false,
+  onMuteToggle,
+  isHapticsEnabled = true
+}) => {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
   const inhaleOpacity = useRef(new Animated.Value(0)).current;
   const soundRef = useRef(null);
+  const exhaleSoundRef = useRef(null);
+  const inhaleSoundRef = useRef(null);
   const animationRef = useRef(null);
   const pulseRef = useRef(null);
   const hapticTimeoutsRef = useRef([]);
+  const omShouldBePlaying = useRef(false); // Track if om sound should be playing
   const [isInhaling, setIsInhaling] = React.useState(false);
-  const [isMuted, setIsMuted] = React.useState(false);
-  const [isHapticsEnabled, setIsHapticsEnabled] = React.useState(true);
-  
-  // Particle animations for whispy breath effect
-  // Create 50 particles with varied properties for realistic breath cloud
-  const particles = useRef(
-    Array.from({ length: 50 }, (_, index) => {
-      const size = 3 + Math.random() * 5; // Varied sizes 3-8px
-      const baseOpacity = 0.2 + Math.random() * 0.4; // Varied base opacity
-      const distance = 50 + Math.random() * 80; // Varied distances
-      const speed = 3000 + Math.random() * 4000; // Varied speeds
-      
-      return {
-        x: new Animated.Value(0),
-        y: new Animated.Value(0),
-        opacity: new Animated.Value(0),
-        size,
-        baseOpacity,
-        distance,
-        speed,
-        angle: (index / 50) * Math.PI * 2 + (Math.random() - 0.5) * 0.8, // Distributed around circle
-      };
-    })
-  ).current;
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [omSoundEnabled, setOmSoundEnabled] = React.useState(true);
+  const [exhaleSoundEnabled, setExhaleSoundEnabled] = React.useState(true);
+  const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
 
   const circleSize = width * 0.75;
   const strokeWidth = 10;
@@ -55,16 +50,52 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+          allowsRecordingIOS: false,
+          interruptionModeIOS: 2, // Mix with others
+          interruptionModeAndroid: 2, // Duck others (allows mixing)
         });
         
+        // Load main breathing audio (om sound)
         const { sound } = await Audio.Sound.createAsync(
-          require('../assets/breathing-audio.mp3'),
+          require('../assets/omfull.mp3'),
           { 
             shouldPlay: false, 
             isLooping: true,
           }
         );
+        
+        // Add status update callback to monitor playback and keep it playing continuously
+        sound.setOnPlaybackStatusUpdate((status) => {
+          // If the sound stops unexpectedly while it should be playing, restart it
+          if (status.isLoaded && !status.isPlaying && !status.isBuffering && omShouldBePlaying.current) {
+            console.log('Om sound stopped unexpectedly, restarting...');
+            sound.playAsync().catch(err => console.log('Error restarting om sound:', err));
+          }
+        });
+        
         soundRef.current = sound;
+
+        // Load exhale sound effect
+        const { sound: exhaleSound } = await Audio.Sound.createAsync(
+          require('../assets/exhale.mp3'),
+          { 
+            shouldPlay: false, 
+            isLooping: false,
+          }
+        );
+        exhaleSoundRef.current = exhaleSound;
+
+        // Load inhale sound effect
+        const { sound: inhaleSound } = await Audio.Sound.createAsync(
+          require('../assets/inahlereal.mp3'),
+          { 
+            shouldPlay: false, 
+            isLooping: false,
+          }
+        );
+        inhaleSoundRef.current = inhaleSound;
       } catch (error) {
         console.log('Error loading audio:', error);
       }
@@ -75,6 +106,12 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
+      }
+      if (exhaleSoundRef.current) {
+        exhaleSoundRef.current.unloadAsync();
+      }
+      if (inhaleSoundRef.current) {
+        inhaleSoundRef.current.unloadAsync();
       }
     };
   }, []);
@@ -97,7 +134,39 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
         console.log('Error setting volume:', error);
       });
     }
+    if (exhaleSoundRef.current) {
+      exhaleSoundRef.current.setVolumeAsync(isMuted ? 0 : 1).catch(error => {
+        console.log('Error setting exhale volume:', error);
+      });
+    }
+    if (inhaleSoundRef.current) {
+      inhaleSoundRef.current.setVolumeAsync(isMuted ? 0 : 1).catch(error => {
+        console.log('Error setting inhale volume:', error);
+      });
+    }
   }, [isMuted]);
+
+  // Handle om sound enable/disable while active
+  useEffect(() => {
+    if (soundRef.current && isActive) {
+      if (omSoundEnabled && omShouldBePlaying.current) {
+        // If enabled and should be playing, ensure it's playing
+        soundRef.current.getStatusAsync().then(status => {
+          if (status.isLoaded && !status.isPlaying) {
+            soundRef.current.playAsync().catch(error => {
+              console.log('Error restarting om sound:', error);
+            });
+          }
+        });
+      } else if (!omSoundEnabled) {
+        // If disabled, stop it
+        omShouldBePlaying.current = false;
+        soundRef.current.stopAsync().catch(error => {
+          console.log('Error stopping om sound:', error);
+        });
+      }
+    }
+  }, [omSoundEnabled, isActive]);
 
   // Haptic control functions
   const triggerHaptic = (type) => {
@@ -180,18 +249,22 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
 
   const startBreathingCycle = async () => {
     try {
-      // Start audio from beginning
-      if (soundRef.current) {
-        await soundRef.current.setPositionAsync(0);
-        await soundRef.current.playAsync();
-      }
-
-      const breathingLoop = () => {
+      const breathingLoop = async () => {
         // Reset to start position
         progressAnim.setValue(0);
         glowAnim.setValue(0);
         inhaleOpacity.setValue(0);
         setIsInhaling(false);
+
+        // Play exhale sound at the start of each cycle - if enabled
+        if (exhaleSoundRef.current && exhaleSoundEnabled) {
+          try {
+            await exhaleSoundRef.current.setPositionAsync(0);
+            await exhaleSoundRef.current.playAsync();
+          } catch (error) {
+            console.log('Error playing exhale sound:', error);
+          }
+        }
 
         // Clear any existing haptic timeouts
         clearHapticTimeouts();
@@ -236,7 +309,7 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
 
         animationRef.current = fillAnimation;
         
-        fillAnimation.start(({ finished }) => {
+          fillAnimation.start(async ({ finished }) => {
           if (!finished) return;
           
           // Stop pulsing
@@ -253,6 +326,16 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
           // Start inhale haptic pattern
           scheduleInhaleHaptics();
           
+          // Play inhale sound effect - if enabled
+          if (inhaleSoundRef.current && inhaleSoundEnabled) {
+            try {
+              await inhaleSoundRef.current.setPositionAsync(0);
+              await inhaleSoundRef.current.playAsync();
+            } catch (error) {
+              console.log('Error playing inhale sound:', error);
+            }
+          }
+          
           // Show "INHALE" text immediately
           setIsInhaling(true);
           
@@ -264,82 +347,6 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
           });
           
           fadeInAnim.start();
-          
-          // Start particle animations - graceful breath cloud effect
-          particles.forEach((particle, index) => {
-            // Stagger start times for more organic appearance
-            const delay = (index / particles.length) * 1000;
-            
-            setTimeout(() => {
-              // Gentle spiraling outward motion, like breath dispersing
-              const spiralAngle = particle.angle + Math.sin(index * 0.3) * 0.5;
-              const x1 = Math.cos(spiralAngle) * particle.distance * 0.3;
-              const y1 = Math.sin(spiralAngle) * particle.distance * 0.3;
-              const x2 = Math.cos(spiralAngle + 0.3) * particle.distance * 0.7;
-              const y2 = Math.sin(spiralAngle + 0.3) * particle.distance * 0.7;
-              const x3 = Math.cos(spiralAngle + 0.6) * particle.distance;
-              const y3 = Math.sin(spiralAngle + 0.6) * particle.distance;
-              
-              Animated.loop(
-                Animated.parallel([
-                  // Gentle flowing X movement
-                  Animated.sequence([
-                    Animated.timing(particle.x, {
-                      toValue: x1,
-                      duration: particle.speed * 0.3,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(particle.x, {
-                      toValue: x2,
-                      duration: particle.speed * 0.35,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(particle.x, {
-                      toValue: x3,
-                      duration: particle.speed * 0.35,
-                      useNativeDriver: true,
-                    }),
-                  ]),
-                  // Gentle flowing Y movement with slight upward drift
-                  Animated.sequence([
-                    Animated.timing(particle.y, {
-                      toValue: y1 - 10,
-                      duration: particle.speed * 0.3,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(particle.y, {
-                      toValue: y2 - 20,
-                      duration: particle.speed * 0.35,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(particle.y, {
-                      toValue: y3 - 30,
-                      duration: particle.speed * 0.35,
-                      useNativeDriver: true,
-                    }),
-                  ]),
-                  // Gentle fade in and out
-                  Animated.sequence([
-                    Animated.timing(particle.opacity, {
-                      toValue: particle.baseOpacity,
-                      duration: particle.speed * 0.25,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(particle.opacity, {
-                      toValue: particle.baseOpacity * 0.7,
-                      duration: particle.speed * 0.5,
-                      useNativeDriver: true,
-                    }),
-                    Animated.timing(particle.opacity, {
-                      toValue: 0,
-                      duration: particle.speed * 0.25,
-                      useNativeDriver: true,
-                    }),
-                  ]),
-                ])
-              ).start();
-            }, delay);
-          });
           
           // Animate fill emptying (360° → 0°) during inhale
           const emptyAnimation = Animated.timing(progressAnim, {
@@ -356,25 +363,24 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
             // Peak completion haptic - "The cycle is complete"
             schedulePauseHaptic();
             
-            // Fade out "INHALE" text at the start of the 1.5s separator
+            // Increment cycle count - one complete exhale+inhale cycle finished
+            if (onCycleComplete) {
+              onCycleComplete();
+            }
+            
+            // Fade out "INHALE" text
             Animated.timing(inhaleOpacity, {
               toValue: 0,
               duration: 300,
               useNativeDriver: true,
             }).start(() => {
               setIsInhaling(false);
-              // Reset particles
-              particles.forEach(particle => {
-                particle.x.setValue(0);
-                particle.y.setValue(0);
-                particle.opacity.setValue(0);
-              });
             });
             
-            // Wait for 1.5s separator, then restart the cycle
+            // Restart cycle after 0.25s pause
             const restartTimeout = setTimeout(() => {
-              breathingLoop(); // Restart cycle after pause
-            }, 1500);
+              breathingLoop(); // Restart cycle after brief pause
+            }, 250);
             
             // Store timeout ref for cleanup
             animationRef.current = { 
@@ -406,13 +412,34 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
     // Clear all haptic timeouts
     clearHapticTimeouts();
     
-    // Stop audio
+    // Stop main audio
     if (soundRef.current) {
       try {
+        omShouldBePlaying.current = false; // Mark that om sound should stop
         await soundRef.current.stopAsync();
         await soundRef.current.setPositionAsync(0);
       } catch (error) {
         console.log('Error stopping audio:', error);
+      }
+    }
+    
+    // Stop exhale sound
+    if (exhaleSoundRef.current) {
+      try {
+        await exhaleSoundRef.current.stopAsync();
+        await exhaleSoundRef.current.setPositionAsync(0);
+      } catch (error) {
+        console.log('Error stopping exhale sound:', error);
+      }
+    }
+    
+    // Stop inhale sound
+    if (inhaleSoundRef.current) {
+      try {
+        await inhaleSoundRef.current.stopAsync();
+        await inhaleSoundRef.current.setPositionAsync(0);
+      } catch (error) {
+        console.log('Error stopping inhale sound:', error);
       }
     }
     
@@ -426,6 +453,19 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
   const handlePressIn = async () => {
     if (!isActive && onStart) {
       onStart(); // Call parent to start timer and set isActive
+      
+      // Start main audio from beginning (only once when first pressing) - if enabled
+      if (soundRef.current && omSoundEnabled) {
+        try {
+          omShouldBePlaying.current = true; // Mark that om sound should be playing
+          await soundRef.current.setPositionAsync(0);
+          await soundRef.current.setIsLoopingAsync(true); // Ensure looping is enabled
+          await soundRef.current.playAsync();
+        } catch (error) {
+          console.log('Error starting main audio:', error);
+        }
+      }
+      
       // Start breathing cycle immediately
       await startBreathingCycle();
     }
@@ -439,13 +479,6 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
     }
   };
 
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-  };
-
-  const toggleHaptics = () => {
-    setIsHapticsEnabled(!isHapticsEnabled);
-  };
 
   // Animate the stroke dash offset to create fill effect
   const strokeDashoffset = progressAnim.interpolate({
@@ -469,20 +502,165 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
     <View style={styles.mainContainer}>
       {/* Top Right Controls */}
       <View style={styles.topRightControls}>
+        {/* Theme Toggle - COMMENTED OUT FOR NOW */}
+        {/* {onThemeToggle && (
+          <GlassView glassEffectStyle="regular" style={styles.glassButton}>
+            <TouchableOpacity
+              onPress={onThemeToggle}
+              activeOpacity={0.7}
+              style={styles.buttonTouchable}
+            >
+              <Ionicons 
+                name={currentTheme === 'modern' ? "flower-outline" : "ellipse-outline"} 
+                size={24} 
+                color="#ffffff"
+                style={{ opacity: 0.8 }}
+              />
+            </TouchableOpacity>
+          </GlassView>
+        )} */}
+        
+        {/* Settings Toggle */}
+        <GlassView glassEffectStyle="regular" style={styles.glassButton}>
+          <TouchableOpacity
+            onPress={() => setShowSettings(!showSettings)}
+            activeOpacity={0.7}
+            style={styles.buttonTouchable}
+          >
+            <Ionicons 
+              name="settings-outline" 
+              size={24} 
+              color="#ffffff"
+              style={{ opacity: 0.8 }}
+            />
+          </TouchableOpacity>
+        </GlassView>
+        
         {/* Volume Toggle */}
-        <TouchableOpacity
-          style={styles.glassButton}
-          onPress={toggleMute}
-          activeOpacity={0.7}
-        >
-          <Ionicons 
-            name={isMuted ? "volume-mute-outline" : "volume-high-outline"} 
-            size={24} 
-            color="#ffffff"
-            style={{ opacity: 0.8 }}
-          />
-        </TouchableOpacity>
+        {onMuteToggle && (
+          <GlassView glassEffectStyle="regular" style={styles.glassButton}>
+            <TouchableOpacity
+              onPress={onMuteToggle}
+              activeOpacity={0.7}
+              style={styles.buttonTouchable}
+            >
+              <Ionicons 
+                name={isMuted ? "volume-mute-outline" : "volume-high-outline"} 
+                size={24} 
+                color="#ffffff"
+                style={{ opacity: 0.8 }}
+              />
+            </TouchableOpacity>
+          </GlassView>
+        )}
       </View>
+
+      {/* Settings Modal */}
+      <Modal
+        visible={showSettings}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowSettings(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+            <GlassView glassEffectStyle="regular" style={styles.settingsMenu}>
+              <Text style={styles.settingsTitle}>Audio Settings</Text>
+              
+              {/* Om Sound Toggle */}
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => setOmSoundEnabled(!omSoundEnabled)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons 
+                    name="musical-notes-outline" 
+                    size={20} 
+                    color="#ffffff"
+                    style={{ opacity: 0.8 }}
+                  />
+                  <Text style={styles.settingLabel}>Om Sound</Text>
+                </View>
+                <View style={[
+                  styles.toggle,
+                  omSoundEnabled && styles.toggleActive
+                ]}>
+                  <View style={[
+                    styles.toggleThumb,
+                    omSoundEnabled && styles.toggleThumbActive
+                  ]} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Exhale Sound Toggle */}
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => setExhaleSoundEnabled(!exhaleSoundEnabled)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons 
+                    name="arrow-down-circle-outline" 
+                    size={20} 
+                    color="#ffffff"
+                    style={{ opacity: 0.8 }}
+                  />
+                  <Text style={styles.settingLabel}>Exhale Sound</Text>
+                </View>
+                <View style={[
+                  styles.toggle,
+                  exhaleSoundEnabled && styles.toggleActive
+                ]}>
+                  <View style={[
+                    styles.toggleThumb,
+                    exhaleSoundEnabled && styles.toggleThumbActive
+                  ]} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Inhale Sound Toggle */}
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => setInhaleSoundEnabled(!inhaleSoundEnabled)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons 
+                    name="arrow-up-circle-outline" 
+                    size={20} 
+                    color="#ffffff"
+                    style={{ opacity: 0.8 }}
+                  />
+                  <Text style={styles.settingLabel}>Inhale Sound</Text>
+                </View>
+                <View style={[
+                  styles.toggle,
+                  inhaleSoundEnabled && styles.toggleActive
+                ]}>
+                  <View style={[
+                    styles.toggleThumb,
+                    inhaleSoundEnabled && styles.toggleThumbActive
+                  ]} />
+                </View>
+              </TouchableOpacity>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowSettings(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
+            </GlassView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
 
       {/* Breathing Circle */}
@@ -556,7 +734,7 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
           ]}
         />
 
-        {/* INHALE text with whispy particles - shows during pause */}
+        {/* INHALE text - shows during pause */}
         {isActive && isInhaling && (
           <Animated.View
             style={[
@@ -566,27 +744,6 @@ const BreathingCircle = ({ duration = 5, isActive = false, onStart, onStop }) =>
               },
             ]}
           >
-            {/* Whispy breath particles - creating a cloud effect */}
-            {particles.map((particle, index) => (
-              <Animated.View
-                key={index}
-                style={[
-                  styles.particle,
-                  {
-                    width: particle.size,
-                    height: particle.size,
-                    borderRadius: particle.size / 2,
-                    opacity: particle.opacity,
-                    transform: [
-                      { translateX: particle.x },
-                      { translateY: particle.y },
-                    ],
-                  },
-                ]}
-              />
-            ))}
-            
-            {/* INHALE text */}
             <Text style={styles.inhaleText}>INHALE</Text>
           </Animated.View>
         )}
@@ -614,13 +771,18 @@ const styles = StyleSheet.create({
   glassButton: {
     width: 48,
     height: 48,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
     borderWidth: 0.3,
     borderColor: 'rgba(255, 255, 255, 0.3)',
-    backdropFilter: 'blur(10px)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonTouchable: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   circleWrapper: {
     flex: 1,
@@ -668,14 +830,76 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     textAlign: 'center',
   },
-  particle: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
-    elevation: 2,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsMenu: {
+    width: width * 0.8,
+    maxWidth: 320,
+    borderRadius: 20,
+    padding: 24,
+    overflow: 'hidden',
+  },
+  settingsTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: '#ffffff',
+    opacity: 0.9,
+  },
+  toggle: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleActive: {
+    backgroundColor: '#8B5CF6',
+  },
+  toggleThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#ffffff',
+    transform: [{ translateX: 0 }],
+  },
+  toggleThumbActive: {
+    transform: [{ translateX: 20 }],
+  },
+  closeButton: {
+    marginTop: 24,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
 

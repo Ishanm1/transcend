@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
 
@@ -14,7 +15,10 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
   const soundRef = useRef(null);
   const animationRef = useRef(null);
   const pulseRef = useRef(null);
+  const hapticTimeoutsRef = useRef([]);
   const [isInhaling, setIsInhaling] = React.useState(false);
+  const [isMuted, setIsMuted] = React.useState(false);
+  const [isHapticsEnabled, setIsHapticsEnabled] = React.useState(true);
 
   const circleSize = width * 0.75;
   const strokeWidth = 10;
@@ -63,6 +67,94 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
     }
   }, [isActive]);
 
+  // Handle mute/unmute
+  useEffect(() => {
+    if (soundRef.current) {
+      soundRef.current.setVolumeAsync(isMuted ? 0 : 1).catch(error => {
+        console.log('Error setting volume:', error);
+      });
+    }
+  }, [isMuted]);
+
+  // Haptic control functions
+  const triggerHaptic = (type) => {
+    if (!isHapticsEnabled) return;
+    
+    try {
+      switch (type) {
+        case 'heavy':
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          break;
+        case 'medium':
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          break;
+        case 'light':
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          break;
+        case 'notification':
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          break;
+        default:
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } catch (error) {
+      console.log('Error triggering haptic:', error);
+    }
+  };
+
+  const clearHapticTimeouts = () => {
+    hapticTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+    hapticTimeoutsRef.current = [];
+  };
+
+  const scheduleExhaleHaptics = () => {
+    if (!isHapticsEnabled) return;
+    
+    const exhalePhase = 8040; // 8.04 seconds
+    
+    // Descending intensity pattern: Heavy → Heavy → Medium → Light
+    const hapticSchedule = [
+      { time: 0, type: 'heavy' },        // 0% - "Begin letting go"
+      { time: exhalePhase * 0.25, type: 'heavy' },   // 25% - "Releasing deeply"
+      { time: exhalePhase * 0.50, type: 'medium' },  // 50% - "Emptying..."
+      { time: exhalePhase * 0.75, type: 'light' },   // 75% - "Nearly empty..."
+      // 100% - Silence, complete emptiness
+    ];
+
+    hapticSchedule.forEach(({ time, type }) => {
+      const timeout = setTimeout(() => triggerHaptic(type), time);
+      hapticTimeoutsRef.current.push(timeout);
+    });
+  };
+
+  const scheduleInhaleHaptics = () => {
+    if (!isHapticsEnabled) return;
+    
+    const inhalePhase = 6960; // 6.96 seconds
+    
+    // Ascending intensity pattern: Light → Medium → Heavy → Heavy
+    const hapticSchedule = [
+      { time: 0, type: 'notification' },     // Transition - "You've touched emptiness"
+      { time: 50, type: 'light' },           // 0% - "Breath returns gently"
+      { time: inhalePhase * 0.33, type: 'medium' },  // 33% - "Filling..."
+      { time: inhalePhase * 0.66, type: 'heavy' },   // 66% - "Gathering energy"
+      { time: inhalePhase * 0.95, type: 'heavy' },   // 95% - "Full. Complete. Whole."
+    ];
+
+    hapticSchedule.forEach(({ time, type }) => {
+      const timeout = setTimeout(() => triggerHaptic(type), time);
+      hapticTimeoutsRef.current.push(timeout);
+    });
+  };
+
+  const schedulePauseHaptic = () => {
+    if (!isHapticsEnabled) return;
+    
+    // Success notification at the peak - "The cycle is complete"
+    const timeout = setTimeout(() => triggerHaptic('notification'), 0);
+    hapticTimeoutsRef.current.push(timeout);
+  };
+
   const startBreathingCycle = async () => {
     try {
       // Start audio from beginning
@@ -78,6 +170,9 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
         inhaleOpacity.setValue(0);
         setIsInhaling(false);
 
+        // Clear any existing haptic timeouts
+        clearHapticTimeouts();
+
         // Stop any existing animations
         if (pulseRef.current) {
           pulseRef.current.stop();
@@ -85,6 +180,9 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
         if (animationRef.current) {
           animationRef.current.stop();
         }
+
+        // Start exhale haptic pattern
+        scheduleExhaleHaptics();
 
         // Pulse animation - continuous during exhale
         const pulseAnimation = Animated.loop(
@@ -129,6 +227,9 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
           // Stop pulsing during inhale
           glowAnim.setValue(0);
           
+          // Start inhale haptic pattern
+          scheduleInhaleHaptics();
+          
           // Show "INHALE" text immediately
           setIsInhaling(true);
           
@@ -152,6 +253,9 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
           
           emptyAnimation.start(({ finished }) => {
             if (!finished) return;
+            
+            // Peak completion haptic - "The cycle is complete"
+            schedulePauseHaptic();
             
             // Fade out "INHALE" text at the start of the 1.5s separator
             Animated.timing(inhaleOpacity, {
@@ -194,6 +298,9 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
     progressAnim.stopAnimation();
     glowAnim.stopAnimation();
     
+    // Clear all haptic timeouts
+    clearHapticTimeouts();
+    
     // Stop audio
     if (soundRef.current) {
       try {
@@ -225,6 +332,14 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
       // Stop everything
       await stopAnimation();
     }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+  };
+
+  const toggleHaptics = () => {
+    setIsHapticsEnabled(!isHapticsEnabled);
   };
 
   // Animate the stroke dash offset to create fill effect
@@ -329,6 +444,24 @@ const BreathingCircle = ({ duration = 5, isActive = false, onTouchStart }) => {
             <Text style={styles.inhaleText}>INHALE</Text>
           </Animated.View>
         )}
+
+        {/* Volume Toggle Button */}
+        <TouchableOpacity
+          style={[styles.volumeButton, { left: -40 }]}
+          onPress={toggleMute}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.volumeIcon}>{isMuted ? '🔇' : '🔊'}</Text>
+        </TouchableOpacity>
+
+        {/* Haptics Toggle Button */}
+        <TouchableOpacity
+          style={[styles.volumeButton, { right: -40 }]}
+          onPress={toggleHaptics}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.volumeIcon}>{isHapticsEnabled ? '📳' : '📴'}</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -379,6 +512,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     letterSpacing: 4,
     textAlign: 'center',
+  },
+  volumeButton: {
+    position: 'absolute',
+    bottom: -80,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(74, 144, 226, 0.3)',
+    zIndex: 15,
+  },
+  volumeIcon: {
+    fontSize: 28,
   },
 });
 

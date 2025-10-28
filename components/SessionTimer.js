@@ -9,6 +9,10 @@ const SessionTimer = ({ time, cycleCount, circleSize }) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatCycles = (count) => {
+    return count.toString().padStart(4, '0');
+  };
+
   return (
     <GlassView 
       glassEffectStyle="regular"
@@ -26,7 +30,7 @@ const SessionTimer = ({ time, cycleCount, circleSize }) => {
       {/* Cycles Column */}
       <View style={styles.column}>
         <Text style={styles.label}>CYCLES</Text>
-        <Text style={styles.value}>{cycleCount}</Text>
+        <Text style={styles.value}>{formatCycles(cycleCount)}</Text>
       </View>
     </GlassView>
   );
@@ -65,8 +69,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   value: {
-    fontSize: 24,
-    fontWeight: '300',
+    fontSize: 11,
+    fontWeight: '600',
     color: '#ffffff',
     letterSpacing: 2,
   },

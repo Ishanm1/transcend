@@ -1,0 +1,1 @@
+{"version":3,"names":["DISSALLOWED_STYLES"],"sourceRoot":"../../../src","sources":["utils/disallowedSelectedEmojiStyles.ts"],"mappings":"AAAA,OAAO,MAAMA,kBAAkB,GAAG,CAChC,QAAQ,EACR,SAAS,EACT,WAAW,EACX,QAAQ,EACR,WAAW,EACX,UAAU,EACV,OAAO,EACP,UAAU,EACV,WAAW,EACX,aAAa,EACb,YAAY,EACZ,aAAa,EACb,WAAW,EACX,cAAc,EACd,YAAY,EACZ,cAAc,EACd,aAAa,EACb,cAAc,EACd,YAAY,EACZ,eAAe,CAChB"}

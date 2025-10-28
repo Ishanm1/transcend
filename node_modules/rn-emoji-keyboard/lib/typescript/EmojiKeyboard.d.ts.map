@@ -1,0 +1,1 @@
+{"version":3,"file":"EmojiKeyboard.d.ts","sourceRoot":"","sources":["../../src/EmojiKeyboard.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAA;AAG9B,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,4BAA4B,CAAA;AAE/D,KAAK,kBAAkB,GAAG,IAAI,CAAC,OAAO,CAAC,aAAa,CAAC,EAAE,MAAM,GAAG,SAAS,CAAC,GACxE,IAAI,CAAC,aAAa,EAAE,iBAAiB,CAAC,CAAA;AAExC,eAAO,MAAM,aAAa,UAAW,kBAAkB,sBAMtD,CAAA"}

@@ -5,6 +5,8 @@ import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
+import { BlurView } from 'expo-blur';
+import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
 
 const { width } = Dimensions.get('window');
 
@@ -25,6 +27,7 @@ const BreathingCircle = ({
   const progressAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
   const inhaleOpacity = useRef(new Animated.Value(0)).current;
+  const exhaleOpacity = useRef(new Animated.Value(0)).current;
   const soundRef = useRef(null);
   const exhaleSoundRef = useRef(null);
   const inhaleSoundRef = useRef(null);
@@ -33,10 +36,18 @@ const BreathingCircle = ({
   const hapticTimeoutsRef = useRef([]);
   const omShouldBePlaying = useRef(false); // Track if om sound should be playing
   const [isInhaling, setIsInhaling] = React.useState(false);
+  const [isExhaling, setIsExhaling] = React.useState(false);
   const [showSettings, setShowSettings] = React.useState(false);
   const [omSoundEnabled, setOmSoundEnabled] = React.useState(true);
   const [exhaleSoundEnabled, setExhaleSoundEnabled] = React.useState(true);
   const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
+  const [showCountdown, setShowCountdown] = React.useState(false);
+  const [countdown, setCountdown] = React.useState(3);
+
+  // Load Allura font
+  const [fontsLoaded] = useFonts({
+    Allura_400Regular,
+  });
 
   const circleSize = width * 0.75;
   const strokeWidth = 10;
@@ -123,7 +134,9 @@ const BreathingCircle = ({
       progressAnim.setValue(0);
       glowAnim.setValue(0);
       inhaleOpacity.setValue(0);
+      exhaleOpacity.setValue(0);
       setIsInhaling(false);
+      setIsExhaling(false);
     }
   }, [isActive]);
 
@@ -222,16 +235,30 @@ const BreathingCircle = ({
   const scheduleInhaleHaptics = () => {
     if (!isHapticsEnabled) return;
     
+    // Wave Pattern: Rising waves - building intensity throughout
+    // Creates crescendo effect as you fill with breath
     const inhalePhase = 6960; // 6.96 seconds
+    const waveInterval = 600; // Every 0.6s (slightly faster than exhale)
+    const numWaves = Math.floor(inhalePhase / waveInterval);
     
-    // Ascending intensity pattern: Light → Medium → Heavy → Heavy
-    const hapticSchedule = [
-      { time: 0, type: 'notification' },     // Transition - "You've touched emptiness"
-      { time: 50, type: 'light' },           // 0% - "Breath returns gently"
-      { time: inhalePhase * 0.33, type: 'medium' },  // 33% - "Filling..."
-      { time: inhalePhase * 0.66, type: 'heavy' },   // 66% - "Gathering energy"
-      { time: inhalePhase * 0.95, type: 'heavy' },   // 95% - "Full. Complete. Whole."
-    ];
+    const hapticSchedule = [];
+    for (let i = 0; i <= numWaves; i++) {
+      const progress = i / numWaves;
+      let intensity;
+      
+      if (progress < 0.33) {
+        intensity = 'light'; // First third: gentle beginning
+      } else if (progress < 0.66) {
+        intensity = 'medium'; // Middle third: building
+      } else {
+        intensity = 'heavy'; // Final third: powerful crescendo
+      }
+      
+      hapticSchedule.push({
+        time: i * waveInterval,
+        type: intensity
+      });
+    }
 
     hapticSchedule.forEach(({ time, type }) => {
       const timeout = setTimeout(() => triggerHaptic(type), time);
@@ -242,7 +269,7 @@ const BreathingCircle = ({
   const schedulePauseHaptic = () => {
     if (!isHapticsEnabled) return;
     
-    // Success notification at the peak - "The cycle is complete"
+    // Monk Design: Gentle notification - "Rest, the cycle is complete"
     const timeout = setTimeout(() => triggerHaptic('notification'), 0);
     hapticTimeoutsRef.current.push(timeout);
   };
@@ -254,6 +281,7 @@ const BreathingCircle = ({
         progressAnim.setValue(0);
         glowAnim.setValue(0);
         inhaleOpacity.setValue(0);
+        exhaleOpacity.setValue(0);
         setIsInhaling(false);
 
         // Play exhale sound at the start of each cycle - if enabled
@@ -265,6 +293,14 @@ const BreathingCircle = ({
             console.log('Error playing exhale sound:', error);
           }
         }
+
+        // Show "EXHALE" text immediately at start of cycle
+        setIsExhaling(true);
+        Animated.timing(exhaleOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
 
         // Clear any existing haptic timeouts
         clearHapticTimeouts();
@@ -335,6 +371,15 @@ const BreathingCircle = ({
               console.log('Error playing inhale sound:', error);
             }
           }
+          
+          // Fade out "EXHALE" text
+          Animated.timing(exhaleOpacity, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }).start(() => {
+            setIsExhaling(false);
+          });
           
           // Show "INHALE" text immediately
           setIsInhaling(true);
@@ -447,27 +492,44 @@ const BreathingCircle = ({
     progressAnim.setValue(0);
     glowAnim.setValue(0);
     inhaleOpacity.setValue(0);
+    exhaleOpacity.setValue(0);
     setIsInhaling(false);
+    setIsExhaling(false);
+    setShowCountdown(false);
+    setCountdown(3);
   };
 
   const handlePressIn = async () => {
     if (!isActive && onStart) {
-      onStart(); // Call parent to start timer and set isActive
+      // Show countdown
+      setShowCountdown(true);
+      setCountdown(3);
       
-      // Start main audio from beginning (only once when first pressing) - if enabled
-      if (soundRef.current && omSoundEnabled) {
-        try {
-          omShouldBePlaying.current = true; // Mark that om sound should be playing
-          await soundRef.current.setPositionAsync(0);
-          await soundRef.current.setIsLoopingAsync(true); // Ensure looping is enabled
-          await soundRef.current.playAsync();
-        } catch (error) {
-          console.log('Error starting main audio:', error);
+      // Countdown from 3 to 1
+      let count = 3;
+      const countdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          setCountdown(count);
+        } else {
+          clearInterval(countdownInterval);
+          setShowCountdown(false);
+          
+          // Start session
+          onStart(); // Call parent to start timer and set isActive
+          
+          // Start main audio from beginning (only once when first pressing) - if enabled
+          if (soundRef.current && omSoundEnabled) {
+            omShouldBePlaying.current = true; // Mark that om sound should be playing
+            soundRef.current.setPositionAsync(0).catch(err => console.log('Error:', err));
+            soundRef.current.setIsLoopingAsync(true).catch(err => console.log('Error:', err));
+            soundRef.current.playAsync().catch(err => console.log('Error:', err));
+          }
+          
+          // Start breathing cycle immediately
+          startBreathingCycle();
         }
-      }
-      
-      // Start breathing cycle immediately
-      await startBreathingCycle();
+      }, 1000); // 1 second intervals
     }
   };
 
@@ -663,92 +725,129 @@ const BreathingCircle = ({
       </Modal>
 
 
-      {/* Breathing Circle */}
-      <TouchableOpacity
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={1}
-        style={styles.circleWrapper}
-      >
-        <View style={[styles.circleContainer, { width: circleSize, height: circleSize }]}>
-        {/* Static glass ring - always visible */}
-        <View
-          style={[
-            styles.staticGlassRing,
-            {
-              width: circleSize,
-              height: circleSize,
-              borderRadius: circleSize / 2,
-            },
-          ]}
-        />
-
-        {/* Glow effect behind the fill */}
-        {isActive && (
-          <Animated.View
-            style={[
-              styles.glowCircle,
-              {
-                width: circleSize,
-                height: circleSize,
-                borderRadius: circleSize / 2,
-                opacity: glowOpacity,
-              },
-            ]}
-          />
+      {/* Start Button or Countdown or Breathing Circle */}
+      <View style={styles.circleWrapper}>
+        {!isActive && !showCountdown && fontsLoaded && (
+          /* Start Button */
+          <TouchableOpacity
+            onPressIn={handlePressIn}
+            activeOpacity={0.8}
+            style={styles.startButtonContainer}
+          >
+            <Text style={styles.startButtonText}>Hold to Start Session</Text>
+          </TouchableOpacity>
         )}
 
-        {/* Blue fill arc - animates 0° → 360° */}
-        {isActive && (
-          <Svg
-            width={circleSize}
-            height={circleSize}
-            style={styles.svgContainer}
-          >
-            <AnimatedCircle
-              cx={circleSize / 2}
-              cy={circleSize / 2}
-              r={radius}
-              stroke="#ffffff"
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              rotation="-90"
-              origin={`${circleSize / 2}, ${circleSize / 2}`}
-              opacity={strokeOpacity}
-            />
-          </Svg>
+        {showCountdown && fontsLoaded && (
+          /* Countdown */
+          <View style={styles.countdownContainer}>
+            <Text style={[styles.countdownText, { fontFamily: 'Allura_400Regular' }]}>
+              exhale in   {countdown}
+            </Text>
+          </View>
         )}
 
-        {/* Inner black circle - creates ring effect */}
-        <View
-          style={[
-            styles.innerCircle,
-            {
-              width: circleSize - strokeWidth * 2 - 10,
-              height: circleSize - strokeWidth * 2 - 10,
-              borderRadius: (circleSize - strokeWidth * 2 - 10) / 2,
-            },
-          ]}
-        />
-
-        {/* INHALE text - shows during pause */}
-        {isActive && isInhaling && (
-          <Animated.View
-            style={[
-              styles.inhaleTextContainer,
-              {
-                opacity: inhaleOpacity,
-              },
-            ]}
+        {isActive && (
+          /* Breathing Circle */
+          <TouchableOpacity
+            onPressOut={handlePressOut}
+            activeOpacity={1}
+            style={styles.circleContainer}
           >
-            <Text style={styles.inhaleText}>INHALE</Text>
-          </Animated.View>
+            <View style={[styles.circleContainer, { width: circleSize, height: circleSize }]}>
+              {/* Static glass ring - visible when active */}
+              <View
+                style={[
+                  styles.staticGlassRing,
+                  {
+                    width: circleSize,
+                    height: circleSize,
+                    borderRadius: circleSize / 2,
+                  },
+                ]}
+              />
+
+              {/* Glow effect behind the fill */}
+              <Animated.View
+                style={[
+                  styles.glowCircle,
+                  {
+                    width: circleSize,
+                    height: circleSize,
+                    borderRadius: circleSize / 2,
+                    opacity: glowOpacity,
+                  },
+                ]}
+              />
+
+              {/* Blue fill arc - animates 0° → 360° */}
+              <Svg
+                width={circleSize}
+                height={circleSize}
+                style={styles.svgContainer}
+              >
+                <AnimatedCircle
+                  cx={circleSize / 2}
+                  cy={circleSize / 2}
+                  r={radius}
+                  stroke="#ffffff"
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round"
+                  rotation="-90"
+                  origin={`${circleSize / 2}, ${circleSize / 2}`}
+                  opacity={strokeOpacity}
+                />
+              </Svg>
+
+              {/* Inner black glass circle with blur - creates ring effect */}
+              <BlurView
+                intensity={100}
+                tint="dark"
+                style={[
+                  styles.innerCircle,
+                  {
+                    width: circleSize - strokeWidth * 2 - 10,
+                    height: circleSize - strokeWidth * 2 - 10,
+                    borderRadius: (circleSize - strokeWidth * 2 - 10) / 2,
+                    overflow: 'hidden',
+                  },
+                ]}
+              />
+
+              {/* EXHALE text - shows during exhale phase */}
+              {isExhaling && (
+                <Animated.View
+                  style={[
+                    styles.inhaleTextContainer,
+                    {
+                      opacity: exhaleOpacity,
+                    },
+                  ]}
+                >
+                  <Text style={styles.inhaleText}>EXHALE</Text>
+                </Animated.View>
+              )}
+
+              {/* INHALE text - shows during inhale phase */}
+              {isInhaling && (
+                <Animated.View
+                  style={[
+                    styles.inhaleTextContainer,
+                    {
+                      opacity: inhaleOpacity,
+                    },
+                  ]}
+                >
+                  <Text style={styles.inhaleText}>INHALE</Text>
+                </Animated.View>
+              )}
+            </View>
+          </TouchableOpacity>
         )}
       </View>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -756,7 +855,7 @@ const BreathingCircle = ({
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent',
     width: '100%',
     height: '100%',
   },
@@ -814,7 +913,6 @@ const styles = StyleSheet.create({
   },
   innerCircle: {
     position: 'absolute',
-    backgroundColor: '#000000',
     zIndex: 2,
   },
   inhaleTextContainer: {
@@ -828,6 +926,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 4,
+    textAlign: 'center',
+  },
+  startButtonContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startButtonText: {
+    fontSize: 20,
+    fontWeight: '300',
+    color: 'rgba(255, 255, 255, 0.8)',
+    letterSpacing: 1,
+  },
+  countdownContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdownText: {
+    fontSize: 36,
+    color: '#ffffff',
     textAlign: 'center',
   },
   modalOverlay: {

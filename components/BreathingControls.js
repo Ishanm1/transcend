@@ -8,13 +8,7 @@ const BreathingControls = ({
 }) => {
   return (
     <View style={styles.container}>
-      {/* Instructions */}
-      <Text style={styles.instructions}>
-        {isActive 
-          ? ''
-          : 'Touch the circle to begin'
-        }
-      </Text>
+      {/* No instructions needed */}
     </View>
   );
 };

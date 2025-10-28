@@ -1,0 +1,1 @@
+{"version":3,"file":"EmojiCategory.d.ts","sourceRoot":"","sources":["../../../src/components/EmojiCategory.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAA;AAG9B,OAAO,EAGL,KAAK,gBAAgB,EAGtB,MAAM,UAAU,CAAA;AAoBjB,eAAO,MAAM,aAAa;UAMhB,gBAAgB;8BACI,MAAM,QAAQ,CAAC,MAAM,cAAc,CAAC,MAAM,CAAC,CAAC;yBACjD,MAAM;wBA6K9B,CAAA"}

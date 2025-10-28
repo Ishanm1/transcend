@@ -1,0 +1,1 @@
+{"version":3,"names":["getHeight","value","screenHeight","parseInt","replace","exports"],"sourceRoot":"../../../src","sources":["utils/getHeight.ts"],"mappings":";;;;;;AAAO,MAAMA,SAAS,GAAGA,CAACC,KAAsB,EAAEC,YAAoB,KACpE,OAAOD,KAAK,KAAK,QAAQ,GAAGA,KAAK,GAAIC,YAAY,GAAG,GAAG,GAAIC,QAAQ,CAACF,KAAK,CAACG,OAAO,CAAC,GAAG,EAAE,EAAE,CAAC,EAAE,EAAE,CAAC;AAAAC,OAAA,CAAAL,SAAA,GAAAA,SAAA"}

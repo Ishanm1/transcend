@@ -708,12 +708,18 @@ const BreathingCircle = ({
     environment === 'forest' && styles.glassButtonForest
   ];
 
+  // Button wrapper component based on environment
+  const ButtonWrapper = environment === 'forest' ? View : GlassView;
+  const buttonWrapperProps = environment === 'forest' 
+    ? { style: glassButtonStyle }
+    : { glassEffectStyle: "regular", style: glassButtonStyle };
+
   return (
     <View style={styles.mainContainer}>
       {/* Top Left Controls - Vertical Stack */}
       <View style={styles.topLeftControls}>
         {/* Settings Toggle - Top */}
-        <View style={glassButtonStyle}>
+        <ButtonWrapper {...buttonWrapperProps}>
           <TouchableOpacity
             onPress={() => setShowProfile(!showProfile)}
             activeOpacity={0.7}
@@ -726,11 +732,11 @@ const BreathingCircle = ({
               style={{ opacity: 0.8 }}
             />
           </TouchableOpacity>
-        </View>
+        </ButtonWrapper>
         
         {/* Volume Toggle - Middle */}
         {onMuteToggle && (
-          <View style={glassButtonStyle}>
+          <ButtonWrapper {...buttonWrapperProps}>
             <TouchableOpacity
               onPress={onMuteToggle}
               activeOpacity={0.7}
@@ -743,7 +749,7 @@ const BreathingCircle = ({
                 style={{ opacity: 0.8 }}
               />
             </TouchableOpacity>
-          </View>
+          </ButtonWrapper>
         )}
       </View>
 
@@ -1071,10 +1077,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)', // Increased to match forest theme visual density
+    // No backgroundColor - GlassView provides the frosted glass effect
   },
   glassButtonForest: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)', // Black opacity - visually matches ocean at 15% white
+    backgroundColor: 'rgba(0, 0, 0, 0.05)', // Black opacity for forest theme
   },
   buttonTouchable: {
     width: '100%',

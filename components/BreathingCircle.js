@@ -702,12 +702,18 @@ const BreathingCircle = ({
     }
   };
 
+  // Conditional glass style based on environment
+  const glassButtonStyle = [
+    styles.glassButton,
+    environment === 'forest' && styles.glassButtonForest
+  ];
+
   return (
     <View style={styles.mainContainer}>
       {/* Top Left Controls - Vertical Stack */}
       <View style={styles.topLeftControls}>
         {/* Settings Toggle - Top */}
-        <GlassView glassEffectStyle="regular" style={styles.glassButton}>
+        <GlassView glassEffectStyle="regular" style={glassButtonStyle}>
           <TouchableOpacity
             onPress={() => setShowProfile(!showProfile)}
             activeOpacity={0.7}
@@ -724,7 +730,7 @@ const BreathingCircle = ({
         
         {/* Volume Toggle - Middle */}
         {onMuteToggle && (
-          <GlassView glassEffectStyle="regular" style={styles.glassButton}>
+          <GlassView glassEffectStyle="regular" style={glassButtonStyle}>
             <TouchableOpacity
               onPress={onMuteToggle}
               activeOpacity={0.7}
@@ -945,6 +951,7 @@ const BreathingCircle = ({
               <View
                 style={[
                   styles.staticGlassRing,
+                  environment === 'forest' && styles.staticGlassRingForest,
                   {
                     width: circleSize,
                     height: circleSize,
@@ -957,6 +964,7 @@ const BreathingCircle = ({
               <Animated.View
                 style={[
                   styles.glowCircle,
+                  environment === 'forest' && styles.glowCircleForest,
                   {
                     width: circleSize,
                     height: circleSize,
@@ -1063,6 +1071,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Default white opacity
+  },
+  glassButtonForest: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)', // Black opacity for forest theme
   },
   buttonTouchable: {
     width: '100%',
@@ -1082,18 +1094,24 @@ const styles = StyleSheet.create({
   },
   staticGlassRing: {
     position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)', // Default white opacity
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
+  staticGlassRingForest: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)', // Black opacity for forest theme
+  },
   glowCircle: {
     position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', // Default white opacity
     shadowColor: '#ffffff',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius: 30,
     elevation: 10,
+  },
+  glowCircleForest: {
+    backgroundColor: 'rgba(0, 0, 0, 0.15)', // Black opacity for forest theme
   },
   svgContainer: {
     position: 'absolute',

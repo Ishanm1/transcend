@@ -10,11 +10,10 @@ import {
 } from 'react-native';
 import { GlassView } from 'expo-glass-effect';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
-const GlassCalendar = ({ sessionHistory, onDayPress }) => {
+const GlassCalendar = ({ sessionHistory, onDayPress, onClose }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [calendarDays, setCalendarDays] = useState([]);
 
@@ -110,19 +109,25 @@ const GlassCalendar = ({ sessionHistory, onDayPress }) => {
   return (
     <View style={styles.container}>
       {/* Month Header */}
-      <GlassView glassEffectStyle="regular" style={styles.monthHeader}>
-        <TouchableOpacity onPress={goToPreviousMonth} style={styles.navButton}>
-          <Ionicons name="chevron-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
+      <View style={styles.monthHeader}>
+        <View style={styles.leftSection}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Ionicons name="close" size={28} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.monthText}>
+            {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          </Text>
+        </View>
         
-        <Text style={styles.monthText}>
-          {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-        </Text>
-        
-        <TouchableOpacity onPress={goToNextMonth} style={styles.navButton}>
-          <Ionicons name="chevron-forward" size={24} color="#ffffff" />
-        </TouchableOpacity>
-      </GlassView>
+        <View style={styles.navButtons}>
+          <TouchableOpacity onPress={goToPreviousMonth} style={styles.navButton}>
+            <Ionicons name="chevron-back" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={goToNextMonth} style={styles.navButton}>
+            <Ionicons name="chevron-forward" size={24} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Day Names Header */}
       <View style={styles.dayNamesContainer}>
@@ -159,13 +164,9 @@ const GlassCalendar = ({ sessionHistory, onDayPress }) => {
                     !dayData.isCurrentMonth && styles.dayCardInactive,
                     dayData.isToday && styles.dayCardToday,
                     sessionCount > 0 && styles.dayCardWithSessions,
+                    sessionCount > 0 && indicatorColor && { borderColor: indicatorColor },
                   ]}
                 >
-                  {/* Session indicator border */}
-                  {indicatorColor && (
-                    <View style={[styles.sessionIndicatorBorder, { borderColor: indicatorColor }]} />
-                  )}
-                  
                   {/* Day Number */}
                   <Text style={[
                     styles.dayNumber,
@@ -175,13 +176,6 @@ const GlassCalendar = ({ sessionHistory, onDayPress }) => {
                     {dayData.day}
                   </Text>
                   
-                  {/* Session Count Badge */}
-                  {sessionCount > 0 && (
-                    <View style={[styles.sessionBadge, { backgroundColor: indicatorColor }]}>
-                      <Text style={styles.sessionBadgeText}>{sessionCount}</Text>
-                    </View>
-                  )}
-                  
                   {/* Screenshot Thumbnail Indicator */}
                   {hasScreenshot && dayData.sessions[0].screenshot && (
                     <View style={styles.thumbnailPreview}>
@@ -190,13 +184,6 @@ const GlassCalendar = ({ sessionHistory, onDayPress }) => {
                         style={styles.miniThumbnail}
                         resizeMode="cover"
                       />
-                    </View>
-                  )}
-                  
-                  {/* Today Label */}
-                  {dayData.isToday && (
-                    <View style={styles.todayLabel}>
-                      <Text style={styles.todayLabelText}>•</Text>
                     </View>
                   )}
                 </GlassView>
@@ -220,9 +207,21 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 12,
     marginBottom: 12,
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderBottomWidth: 0.3,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  navButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   navButton: {
     padding: 8,
@@ -266,7 +265,7 @@ const styles = StyleSheet.create({
   dayCard: {
     flex: 1,
     borderRadius: 8,
-    borderWidth: 0.5,
+    borderWidth: 0.3,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -277,20 +276,12 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   dayCardToday: {
-    borderWidth: 2,
+    borderWidth: 0.5,
     borderColor: '#4ADEDB',
   },
   dayCardWithSessions: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  sessionIndicatorBorder: {
-    position: 'absolute',
-    top: -1,
-    left: -1,
-    right: -1,
-    bottom: -1,
-    borderRadius: 8,
-    borderWidth: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 0.3,
   },
   dayNumber: {
     fontSize: 16,
@@ -303,23 +294,6 @@ const styles = StyleSheet.create({
   dayNumberToday: {
     fontWeight: '700',
     fontSize: 18,
-  },
-  sessionBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  sessionBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#ffffff',
   },
   thumbnailPreview: {
     position: 'absolute',
@@ -335,16 +309,6 @@ const styles = StyleSheet.create({
   miniThumbnail: {
     width: '100%',
     height: '100%',
-  },
-  todayLabel: {
-    position: 'absolute',
-    bottom: 4,
-    alignSelf: 'center',
-  },
-  todayLabelText: {
-    fontSize: 16,
-    color: '#4ADEDB',
-    fontWeight: '900',
   },
 });
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput, Image } from 'react-native';
+import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput, Image, ScrollView } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
@@ -52,7 +52,7 @@ const BreathingCircle = ({
   const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
   const [showCountdown, setShowCountdown] = React.useState(false);
   const [countdown, setCountdown] = React.useState(3);
-
+  
   // Load Allura font
   const [fontsLoaded] = useFonts({
     Allura_400Regular,
@@ -737,22 +737,6 @@ const BreathingCircle = ({
             </TouchableOpacity>
           </GlassView>
         )}
-        
-        {/* Calendar - Bottom */}
-        <GlassView glassEffectStyle="regular" style={styles.glassButton}>
-          <TouchableOpacity
-            onPress={() => setShowCalendar(true)}
-            activeOpacity={0.7}
-            style={styles.buttonTouchable}
-          >
-            <Ionicons 
-              name="calendar-outline" 
-              size={24} 
-              color="#ffffff"
-              style={{ opacity: 0.8 }}
-            />
-          </TouchableOpacity>
-        </GlassView>
       </View>
 
       {/* Session Calendar Modal */}
@@ -775,8 +759,13 @@ const BreathingCircle = ({
         >
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
             <BlurView intensity={100} tint="dark" style={styles.settingsMenu}>
-              {/* Profile Section */}
-              <View style={styles.profileHeader}>
+              <ScrollView 
+                style={styles.settingsScrollView}
+                showsVerticalScrollIndicator={false}
+                bounces={true}
+              >
+                {/* Profile Section */}
+                <View style={styles.profileHeader}>
                 <TouchableOpacity onPress={pickImage} style={styles.profileImageContainer}>
                   {profileImage ? (
                     <Image source={{ uri: profileImage }} style={styles.profileImage} />
@@ -799,7 +788,23 @@ const BreathingCircle = ({
 
               {/* Divider */}
               <View style={styles.settingsDivider} />
-              
+
+              {/* Calendar Button */}
+              <TouchableOpacity
+                style={styles.calendarMenuItem}
+                onPress={() => {
+                  setShowProfile(false);
+                  setShowCalendar(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.settingLabel}>Session History</Text>
+                <Ionicons name="calendar-outline" size={24} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.settingsDivider} />
+
               {/* Background Music Section */}
               <View style={styles.settingSection}>
                 <Text style={styles.sectionTitle}>Background Music</Text>
@@ -900,6 +905,7 @@ const BreathingCircle = ({
                   </View>
                 </TouchableOpacity>
               </View>
+              </ScrollView>
 
               {/* Close Button */}
               <GlassView glassEffectStyle="regular" style={styles.closeButtonGlass}>
@@ -1036,6 +1042,7 @@ const BreathingCircle = ({
                   <Text style={styles.inhaleText}>INHALE</Text>
                 </Animated.View>
               )}
+
             </View>
           </TouchableOpacity>
         )}
@@ -1145,15 +1152,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  safetyModalContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   settingsMenu: {
     width: width * 0.85,
     maxWidth: 360,
+    maxHeight: 600, // Fixed height to enable scrolling
     borderRadius: 16,
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 20,
     overflow: 'hidden',
     backgroundColor: 'transparent',
+  },
+  settingsScrollView: {
+    maxHeight: 480, // Allow content to scroll within the modal
   },
   profileHeader: {
     alignItems: 'center',
@@ -1279,10 +1301,17 @@ const styles = StyleSheet.create({
   },
   closeButtonGlass: {
     marginTop: 20,
-    borderRadius: 12,
+    borderRadius: 4,
     overflow: 'hidden',
     borderWidth: 0.3,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  calendarMenuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   closeButtonInner: {
     paddingVertical: 16,

@@ -10,7 +10,6 @@ import {
   Image,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { GlassView } from 'expo-glass-effect';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -51,13 +50,13 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
     <Modal
       visible={visible}
       transparent={true}
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <BlurView intensity={90} tint="dark" style={styles.overlay}>
         <View style={styles.container}>
-          {/* Header */}
-          <GlassView glassEffectStyle="regular" style={styles.header}>
+          {/* Floating Header */}
+          <View style={styles.headerFloating}>
             <View style={styles.headerContent}>
               <View>
                 <Text style={styles.dateText}>{formatDate(date)}</Text>
@@ -69,81 +68,84 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
                 <Ionicons name="close-circle" size={32} color="rgba(255,255,255,0.9)" />
               </TouchableOpacity>
             </View>
-          </GlassView>
+          </View>
 
-          {/* Stats Summary */}
-          <GlassView glassEffectStyle="regular" style={styles.statsContainer}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Ionicons name="time-outline" size={24} color="#4ADEDB" />
-                <Text style={styles.statValue}>{getTotalTimeForSessions(sessions)}</Text>
-                <Text style={styles.statLabel}>Total Time</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Ionicons name="refresh-outline" size={24} color="#6DD5FA" />
-                <Text style={styles.statValue}>{getTotalCycles(sessions)}</Text>
-                <Text style={styles.statLabel}>Total Cycles</Text>
+          {/* Content Rectangle */}
+          <View style={styles.contentRectangle}>
+            {/* Stats Summary */}
+            <View style={styles.statsContainer}>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Ionicons name="time-outline" size={24} color="#4ADEDB" />
+                  <Text style={styles.statValue}>{getTotalTimeForSessions(sessions)}</Text>
+                  <Text style={styles.statLabel}>Total Time</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Ionicons name="refresh-outline" size={24} color="#6DD5FA" />
+                  <Text style={styles.statValue}>{getTotalCycles(sessions)}</Text>
+                  <Text style={styles.statLabel}>Total Cycles</Text>
+                </View>
               </View>
             </View>
-          </GlassView>
 
-          {/* Sessions List */}
-          <ScrollView 
-            style={styles.sessionsList}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.sessionsListContent}
-          >
-            {sessions.map((session, index) => (
-              <GlassView key={index} glassEffectStyle="regular" style={styles.sessionCard}>
-                <View style={styles.sessionHeader}>
-                  <View style={styles.sessionTimeInfo}>
-                    <Ionicons name="time" size={18} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.sessionTimestamp}>{session.timestamp}</Text>
-                  </View>
-                  <LinearGradient
-                    colors={['#4ADEDB', '#6DD5FA']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.sessionBadge}
-                  >
-                    <Text style={styles.sessionNumber}>#{index + 1}</Text>
-                  </LinearGradient>
-                </View>
-
-                <View style={styles.sessionStats}>
-                  <View style={styles.sessionStatItem}>
-                    <Text style={styles.sessionStatLabel}>Duration</Text>
-                    <Text style={styles.sessionStatValue}>{session.time}</Text>
-                  </View>
-                  <View style={styles.sessionStatDivider} />
-                  <View style={styles.sessionStatItem}>
-                    <Text style={styles.sessionStatLabel}>Cycles</Text>
-                    <Text style={styles.sessionStatValue}>{session.cycles}</Text>
-                  </View>
-                </View>
-
-                {/* Screenshot */}
-                {session.screenshot && (
-                  <TouchableOpacity
-                    style={styles.screenshotContainer}
-                    onPress={() => setViewingScreenshot(session.screenshot)}
-                    activeOpacity={0.8}
-                  >
-                    <Image 
-                      source={{ uri: session.screenshot }}
-                      style={styles.screenshot}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.screenshotOverlay}>
-                      <Ionicons name="expand-outline" size={32} color="#ffffff" />
-                      <Text style={styles.screenshotText}>View Summary</Text>
+            {/* Sessions List */}
+            <ScrollView 
+              style={styles.sessionsList}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sessionsListContent}
+            >
+              {sessions.map((session, index) => (
+                <View key={index} style={styles.sessionCard}>
+                  <View style={styles.sessionHeader}>
+                    <View style={styles.sessionTimeInfo}>
+                      <Ionicons name="time" size={18} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.sessionTimestamp}>{session.timestamp}</Text>
                     </View>
-                  </TouchableOpacity>
-                )}
-              </GlassView>
-            ))}
-          </ScrollView>
+                    <LinearGradient
+                      colors={['#4ADEDB', '#6DD5FA']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.sessionBadge}
+                    >
+                      <Text style={styles.sessionNumber}>#{index + 1}</Text>
+                    </LinearGradient>
+                  </View>
+
+                  <View style={styles.sessionStats}>
+                    <View style={styles.sessionStatItem}>
+                      <Text style={styles.sessionStatLabel}>Duration</Text>
+                      <Text style={styles.sessionStatValue}>{session.time}</Text>
+                    </View>
+                    <View style={styles.sessionStatDivider} />
+                    <View style={styles.sessionStatItem}>
+                      <Text style={styles.sessionStatLabel}>Cycles</Text>
+                      <Text style={styles.sessionStatValue}>{session.cycles}</Text>
+                    </View>
+                  </View>
+
+                  {/* Screenshot */}
+                  {session.screenshot && (
+                    <TouchableOpacity
+                      style={styles.screenshotContainer}
+                      onPress={() => setViewingScreenshot(session.screenshot)}
+                      activeOpacity={0.8}
+                    >
+                      <Image 
+                        source={{ uri: session.screenshot }}
+                        style={styles.screenshot}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.screenshotOverlay}>
+                        <Ionicons name="expand-outline" size={32} color="#ffffff" />
+                        <Text style={styles.screenshotText}>View Summary</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
         </View>
       </BlurView>
 
@@ -179,23 +181,24 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingTop: 100,
   },
   container: {
-    height: '80%',
+    flex: 1,
     backgroundColor: 'rgba(10, 10, 10, 0.5)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
+    paddingTop: 20,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  header: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  headerFloating: {
+    backgroundColor: 'rgba(20, 20, 30, 0.85)',
+    borderRadius: 2,
     borderWidth: 0.5,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 20,
+    paddingVertical: 16,
     paddingHorizontal: 20,
+    marginBottom: 16,
   },
   headerContent: {
     flexDirection: 'row',
@@ -215,12 +218,18 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  statsContainer: {
-    margin: 16,
-    borderRadius: 16,
+  contentRectangle: {
+    flex: 1,
+    backgroundColor: 'rgba(20, 20, 30, 0.85)',
+    borderRadius: 2,
     borderWidth: 0.5,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
+  },
+  statsContainer: {
     padding: 20,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   statsRow: {
     flexDirection: 'row',
@@ -251,16 +260,18 @@ const styles = StyleSheet.create({
   sessionsList: {
     flex: 1,
     paddingHorizontal: 16,
+    paddingTop: 12,
   },
   sessionsListContent: {
     paddingBottom: 20,
   },
   sessionCard: {
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 4,
     borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     padding: 16,
+    backgroundColor: 'rgba(30, 30, 40, 0.6)',
   },
   sessionHeader: {
     flexDirection: 'row',

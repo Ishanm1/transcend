@@ -19,6 +19,7 @@ const BreathingScreen = () => {
   const [summaryData, setSummaryData] = useState({ time: '00:00', cycles: 0 });
   const [environment, setEnvironment] = useState('ocean');
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [userProfile, setUserProfile] = useState({ name: 'Friend', image: null });
   const { sessionTime, start, stopAndReset } = useSessionTimer();
   const duration = 5; // Fixed 5-second duration
   
@@ -44,13 +45,26 @@ const BreathingScreen = () => {
     try {
       // Get the inactive video player
       const inactiveVideoRef = activeVideoIndex === 0 ? secondaryVideoRef : primaryVideoRef;
-      const activeVideoRef = activeVideoIndex === 0 ? primaryVideoRef : secondaryVideoRef;
       
       // Load new video in inactive player
       const newVideo = ENVIRONMENTS[newEnv].video;
       if (inactiveVideoRef.current) {
-        await inactiveVideoRef.current.unloadAsync();
-        await inactiveVideoRef.current.loadAsync(newVideo, { shouldPlay: true, isLooping: true, isMuted: true });
+        // Unload previous video
+        try {
+          await inactiveVideoRef.current.unloadAsync();
+        } catch (e) {
+          console.log('Video already unloaded:', e);
+        }
+        
+        // Load and play new video
+        await inactiveVideoRef.current.loadAsync(newVideo, { 
+          shouldPlay: true, 
+          isLooping: true, 
+          isMuted: true 
+        });
+        
+        // Wait a bit for video to be ready
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       // Crossfade animation (500ms)
@@ -59,7 +73,7 @@ const BreathingScreen = () => {
         duration: 500,
         useNativeDriver: true,
       }).start(() => {
-        // Swap active video index
+        // Swap active video index and update environment
         setActiveVideoIndex(activeVideoIndex === 0 ? 1 : 0);
         setEnvironment(newEnv);
         setIsTransitioning(false);
@@ -121,6 +135,10 @@ const BreathingScreen = () => {
     setIsHapticsEnabled(!isHapticsEnabled);
   };
 
+  const handleProfileUpdate = (profile) => {
+    setUserProfile(profile);
+  };
+
   return (
     <View style={styles.container}>
       {/* Dual Background Videos for Crossfade */}
@@ -139,7 +157,7 @@ const BreathingScreen = () => {
       <Animated.View style={[styles.backgroundVideo, { opacity: Animated.subtract(1, videoOpacity) }]}>
         <Video
           ref={secondaryVideoRef}
-          source={ENVIRONMENTS[environment].video}
+          source={ENVIRONMENTS.ocean.video}
           style={styles.video}
           resizeMode={ResizeMode.COVER}
           isLooping
@@ -171,6 +189,7 @@ const BreathingScreen = () => {
         isHapticsEnabled={isHapticsEnabled}
         environment={environment}
         onEnvironmentChange={handleEnvironmentChange}
+        onProfileUpdate={handleProfileUpdate}
       />
 
       {/* Sacred Geometry Mandala - COMMENTED OUT FOR NOW */}
@@ -201,7 +220,11 @@ const BreathingScreen = () => {
           sessionTime={summaryData.time}
           cycleCount={summaryData.cycles}
           onClose={handleCloseSummary}
-          userProfile={{ initials: 'ME', name: 'Friend' }}
+          userProfile={{ 
+            name: userProfile.name || 'Friend', 
+            image: userProfile.image,
+            initials: (userProfile.name || 'ME').substring(0, 2).toUpperCase()
+          }}
         />
       </View>
     </View>

@@ -7,7 +7,8 @@ import {
   StyleSheet, 
   Dimensions,
   Animated,
-  Alert
+  Alert,
+  Image
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { GlassView } from 'expo-glass-effect';
@@ -355,7 +356,11 @@ const SessionSummaryModal = ({
             {/* Header with Profile Picture - Redesigned */}
             <View style={styles.headerRedesigned}>
               <View style={styles.profilePic}>
-                <Text style={styles.profileInitials}>{userProfile.initials}</Text>
+                {userProfile.image ? (
+                  <Image source={{ uri: userProfile.image }} style={styles.profileImage} />
+                ) : (
+                  <Text style={styles.profileInitials}>{userProfile.initials}</Text>
+                )}
               </View>
               <View style={styles.textSection}>
                 <Text style={styles.greatWorkText}>
@@ -581,6 +586,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     shadowColor: '#ffffff',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
@@ -595,6 +601,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
     letterSpacing: 1,
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
   },
   greatWorkText: {
     fontSize: 18,

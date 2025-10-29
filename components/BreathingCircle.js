@@ -27,7 +27,8 @@ const BreathingCircle = ({
   onMuteToggle,
   isHapticsEnabled = true,
   environment = 'ocean',
-  onEnvironmentChange
+  onEnvironmentChange,
+  onProfileUpdate
 }) => {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -300,6 +301,13 @@ const BreathingCircle = ({
 
     switchEnvironment();
   }, [environment]); // Removed isMuted from dependencies to prevent re-triggering on mute toggle
+
+  // Notify parent of profile updates
+  useEffect(() => {
+    if (onProfileUpdate) {
+      onProfileUpdate({ name: username, image: profileImage });
+    }
+  }, [username, profileImage]);
 
   // Haptic control functions
   const triggerHaptic = (type) => {

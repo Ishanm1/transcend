@@ -147,7 +147,7 @@ const BreathingScreen = () => {
           sessionTime={summaryData.time}
           cycleCount={summaryData.cycles}
           onClose={handleCloseSummary}
-          userProfile={{ initials: 'ME' }}
+          userProfile={{ initials: 'ME', name: 'Friend' }}
         />
       </View>
     </View>

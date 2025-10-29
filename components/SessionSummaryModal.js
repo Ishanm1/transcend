@@ -16,7 +16,10 @@ import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import EmojiSelector from 'react-native-emoji-selector';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import StatCard from './StatCard';
+import { saveSession } from '../utils/sessionStorage';
 
 const { width } = Dimensions.get('window');
 
@@ -134,6 +137,7 @@ const SessionSummaryModal = ({
   const [afterEmojis, setAfterEmojis] = useState([null, null, null]); // 3 empty slots
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [currentEmojiSlot, setCurrentEmojiSlot] = useState(null); // { type: 'before'|'after', index: number }
+  const [showLogConfirmation, setShowLogConfirmation] = useState(false);
   const viewRef = useRef(null);
   
   // Animation values
@@ -161,6 +165,16 @@ const SessionSummaryModal = ({
       });
     }
   }, [visible]); // Only depend on visible, not benefits
+
+  // Save session when modal opens
+  useEffect(() => {
+    if (visible && sessionTime && cycleCount) {
+      saveSession({
+        time: sessionTime,
+        cycles: cycleCount,
+      });
+    }
+  }, [visible]);
 
   // Entrance animation
   useEffect(() => {
@@ -242,6 +256,35 @@ const SessionSummaryModal = ({
     }
   };
 
+  const handleLogSession = async () => {
+    try {
+      // Capture screenshot
+      const uri = await captureRef(viewRef, {
+        format: 'png',
+        quality: 1,
+      });
+
+      // Save session with screenshot
+      const success = await saveSession({
+        time: sessionTime,
+        cycles: cycleCount,
+        screenshot: uri,
+      });
+
+      setShowLogConfirmation(false);
+      
+      if (success) {
+        Alert.alert('Success', 'Session logged to calendar with screenshot!');
+      } else {
+        Alert.alert('Error', 'Failed to log session');
+      }
+    } catch (error) {
+      console.log('Error logging session:', error);
+      Alert.alert('Error', 'Could not capture and log session');
+      setShowLogConfirmation(false);
+    }
+  };
+
   const handleDone = () => {
     // Reset emojis to empty
     setBeforeEmojis([null, null, null]);
@@ -289,6 +332,13 @@ const SessionSummaryModal = ({
           >
             <Ionicons name="share-outline" size={24} color="rgba(255,255,255,0.9)" />
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => setShowLogConfirmation(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={28} color="rgba(255,255,255,0.9)" />
+          </TouchableOpacity>
         </View>
 
         <Animated.View 
@@ -302,19 +352,32 @@ const SessionSummaryModal = ({
           ]}
         >
           <BlurView intensity={100} tint="dark" style={styles.glassContainer}>
-            {/* Header with Profile Picture */}
-            <View style={styles.header}>
+            {/* Header with Profile Picture - Redesigned */}
+            <View style={styles.headerRedesigned}>
               <View style={styles.profilePic}>
                 <Text style={styles.profileInitials}>{userProfile.initials}</Text>
               </View>
-              <View style={styles.headerText}>
-                <Text style={[styles.title, { fontFamily: 'Allura_400Regular' }]}>
-                  {sessionTitle}
+              <View style={styles.textSection}>
+                <Text style={styles.greatWorkText}>
+                  Great work, {userProfile.name || 'Friend'}!
                 </Text>
-                <Text style={styles.practiceMessage}>
+                <Text style={styles.practiceMessageLeft}>
                   You practiced mindfulness for
                 </Text>
-                <Text style={styles.timeHighlight}>{formattedTime}</Text>
+                <MaskedView
+                  maskElement={
+                    <Text style={styles.timeGradientMask}>{formattedTime}</Text>
+                  }
+                >
+                  <LinearGradient
+                    colors={['#4ADEDB', '#6DD5FA', '#2193B0']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientBackground}
+                  >
+                    <Text style={styles.timeGradientTransparent}>{formattedTime}</Text>
+                  </LinearGradient>
+                </MaskedView>
               </View>
             </View>
 
@@ -439,6 +502,34 @@ const SessionSummaryModal = ({
             </View>
           </Modal>
         )}
+
+        {/* Log Session Confirmation Modal */}
+        {showLogConfirmation && (
+          <View style={styles.confirmationOverlay}>
+            <BlurView intensity={80} tint="dark" style={styles.confirmationBlur}>
+              <View style={styles.confirmationContent}>
+                <Ionicons name="checkmark-circle-outline" size={48} color="#ffffff" style={{ opacity: 0.9 }} />
+                <Text style={styles.confirmationText}>Log Session?</Text>
+                <View style={styles.confirmationButtons}>
+                  <TouchableOpacity 
+                    style={styles.confirmButton}
+                    onPress={handleLogSession}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmButtonText}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.cancelButton}
+                    onPress={() => setShowLogConfirmation(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </BlurView>
+          </View>
+        )}
       </BlurView>
 
     </Modal>
@@ -475,6 +566,12 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  headerRedesigned: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 12,
+  },
   profilePic: {
     width: 55,
     height: 55,
@@ -489,11 +586,50 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
+  textSection: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   profileInitials: {
     fontSize: 18,
     fontWeight: '600',
     color: '#ffffff',
     letterSpacing: 1,
+  },
+  greatWorkText: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#ffffff',
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
+  practiceMessageLeft: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    lineHeight: 18,
+    textAlign: 'left',
+  },
+  timeGradientMask: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    marginTop: 4,
+    backgroundColor: 'transparent',
+  },
+  timeGradientTransparent: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    marginTop: 4,
+    opacity: 0,
+  },
+  gradientBackground: {
+    paddingVertical: 0,
+  },
+  timeHighlightInline: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   headerText: {
     flex: 1,
@@ -611,6 +747,65 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#fff',
+  },
+  confirmationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  confirmationBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  confirmationContent: {
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    minWidth: 260,
+  },
+  confirmationText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  confirmationButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  confirmButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
 });
 

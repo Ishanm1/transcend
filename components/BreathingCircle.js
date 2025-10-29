@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput, Image } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
 import { BlurView } from 'expo-blur';
 import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
+import * as ImagePicker from 'expo-image-picker';
+import SessionCalendar from './SessionCalendar';
 
 const { width } = Dimensions.get('window');
 
@@ -41,8 +43,11 @@ const BreathingCircle = ({
   const [isInhaling, setIsInhaling] = React.useState(false);
   const [isExhaling, setIsExhaling] = React.useState(false);
   const [showProfile, setShowProfile] = React.useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [username, setUsername] = React.useState('');
-  const [backgroundMusic, setBackgroundMusic] = React.useState('ocean'); // 'om', 'ocean', or 'none'
+  const [profileImage, setProfileImage] = useState(null);
+  const [backgroundMusic, setBackgroundMusic] = React.useState('ocean'); // 'ocean' or 'none'
+  const [omSoundEnabled, setOmSoundEnabled] = useState(false);
   const [exhaleSoundEnabled, setExhaleSoundEnabled] = React.useState(true);
   const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
   const [showCountdown, setShowCountdown] = React.useState(false);
@@ -177,12 +182,6 @@ const BreathingCircle = ({
           await oceanSoundRef.current.setVolumeAsync(0);
           await oceanSoundRef.current.playAsync();
           await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 1000 });
-        } else if (backgroundMusic === 'om' && omSoundRef.current) {
-          bgMusicShouldBePlaying.current = true;
-          await omSoundRef.current.setIsLoopingAsync(true);
-          await omSoundRef.current.setVolumeAsync(0);
-          await omSoundRef.current.playAsync();
-          await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 1000 });
         } else {
           bgMusicShouldBePlaying.current = false;
         }
@@ -219,12 +218,7 @@ const BreathingCircle = ({
     const updateVolume = async () => {
       try {
         // Only adjust volume for the currently playing background music
-        if (backgroundMusic === 'om' && omSoundRef.current && bgMusicShouldBePlaying.current) {
-          const status = await omSoundRef.current.getStatusAsync();
-          if (status.isLoaded && status.isPlaying) {
-            await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
-          }
-        } else if (backgroundMusic === 'ocean' && oceanSoundRef.current && bgMusicShouldBePlaying.current) {
+        if (backgroundMusic === 'ocean' && oceanSoundRef.current && bgMusicShouldBePlaying.current) {
           const status = await oceanSoundRef.current.getStatusAsync();
           if (status.isLoaded && status.isPlaying) {
             await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
@@ -232,6 +226,12 @@ const BreathingCircle = ({
         }
         
         // Adjust breath sounds volume only if they're loaded (they play on demand)
+        if (omSoundRef.current && omSoundEnabled) {
+          const status = await omSoundRef.current.getStatusAsync();
+          if (status.isLoaded) {
+            await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
+          }
+        }
         if (exhaleSoundRef.current && exhaleSoundEnabled) {
           const status = await exhaleSoundRef.current.getStatusAsync();
           if (status.isLoaded) {
@@ -250,7 +250,7 @@ const BreathingCircle = ({
     };
     
     updateVolume();
-  }, [isMuted, backgroundMusic, exhaleSoundEnabled, inhaleSoundEnabled]);
+  }, [isMuted, backgroundMusic, omSoundEnabled, exhaleSoundEnabled, inhaleSoundEnabled]);
 
   // Handle background music switching with fade
   useEffect(() => {
@@ -290,13 +290,7 @@ const BreathingCircle = ({
         await new Promise(resolve => setTimeout(resolve, 50));
 
         // Start the selected background music with fade in
-        if (backgroundMusic === 'om' && omSoundRef.current) {
-          bgMusicShouldBePlaying.current = true;
-          await omSoundRef.current.setIsLoopingAsync(true);
-          await omSoundRef.current.setVolumeAsync(0);
-          await omSoundRef.current.playAsync();
-          await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 500 });
-        } else if (backgroundMusic === 'ocean' && oceanSoundRef.current) {
+        if (backgroundMusic === 'ocean' && oceanSoundRef.current) {
           bgMusicShouldBePlaying.current = true;
           await oceanSoundRef.current.setIsLoopingAsync(true);
           await oceanSoundRef.current.setVolumeAsync(0);
@@ -415,6 +409,16 @@ const BreathingCircle = ({
         inhaleOpacity.setValue(0);
         exhaleOpacity.setValue(0);
         setIsInhaling(false);
+
+        // Play Om sound at the start of each cycle if enabled (plays first to set the tone)
+        if (omSoundRef.current && omSoundEnabled) {
+          try {
+            await omSoundRef.current.setPositionAsync(0);
+            await omSoundRef.current.playAsync();
+          } catch (error) {
+            console.log('Error playing om sound:', error);
+          }
+        }
 
         // Play exhale sound at the start of each cycle - if enabled
         if (exhaleSoundRef.current && exhaleSoundEnabled) {
@@ -676,11 +680,31 @@ const BreathingCircle = ({
     outputRange: [0.2, 0.7],
   });
 
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      alert('Permission to access camera roll is required!');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri);
+    }
+  };
+
   return (
     <View style={styles.mainContainer}>
-      {/* Top Right Controls - Vertical Stack */}
-      <View style={styles.topRightControls}>
-        {/* Profile Toggle - Top */}
+      {/* Top Left Controls - Vertical Stack */}
+      <View style={styles.topLeftControls}>
+        {/* Settings Toggle - Top */}
         <GlassView glassEffectStyle="regular" style={styles.glassButton}>
           <TouchableOpacity
             onPress={() => setShowProfile(!showProfile)}
@@ -688,7 +712,7 @@ const BreathingCircle = ({
             style={styles.buttonTouchable}
           >
             <Ionicons 
-              name="person-outline" 
+              name="settings-outline" 
               size={24} 
               color="#ffffff"
               style={{ opacity: 0.8 }}
@@ -696,7 +720,7 @@ const BreathingCircle = ({
           </TouchableOpacity>
         </GlassView>
         
-        {/* Volume Toggle - Bottom */}
+        {/* Volume Toggle - Middle */}
         {onMuteToggle && (
           <GlassView glassEffectStyle="regular" style={styles.glassButton}>
             <TouchableOpacity
@@ -713,7 +737,29 @@ const BreathingCircle = ({
             </TouchableOpacity>
           </GlassView>
         )}
+        
+        {/* Calendar - Bottom */}
+        <GlassView glassEffectStyle="regular" style={styles.glassButton}>
+          <TouchableOpacity
+            onPress={() => setShowCalendar(true)}
+            activeOpacity={0.7}
+            style={styles.buttonTouchable}
+          >
+            <Ionicons 
+              name="calendar-outline" 
+              size={24} 
+              color="#ffffff"
+              style={{ opacity: 0.8 }}
+            />
+          </TouchableOpacity>
+        </GlassView>
       </View>
+
+      {/* Session Calendar Modal */}
+      <SessionCalendar
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+      />
 
       {/* Profile Modal */}
       <Modal
@@ -728,81 +774,43 @@ const BreathingCircle = ({
           onPress={() => setShowProfile(false)}
         >
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-            <GlassView glassEffectStyle="regular" style={styles.settingsMenu}>
-              <Text style={styles.settingsTitle}>Profile & Settings</Text>
-              
-              {/* Profile Section - Compact */}
-              <View style={styles.profileSectionCompact}>
-                <View style={styles.profilePicContainerSmall}>
-                  <Ionicons 
-                    name="person" 
-                    size={36} 
-                    color="rgba(255,255,255,0.5)"
-                  />
-                </View>
-                <View style={styles.profileInfo}>
-                  <TextInput
-                    style={styles.usernameInputInline}
-                    value={username}
-                    onChangeText={setUsername}
-                    placeholder="Your Name"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    maxLength={20}
-                  />
-                  <TouchableOpacity style={styles.changePictureButtonSmall}>
-                    <Ionicons name="camera-outline" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.changePictureTextSmall}>Change photo</Text>
-                  </TouchableOpacity>
-                </View>
+            <BlurView intensity={100} tint="dark" style={styles.settingsMenu}>
+              {/* Profile Section */}
+              <View style={styles.profileHeader}>
+                <TouchableOpacity onPress={pickImage} style={styles.profileImageContainer}>
+                  {profileImage ? (
+                    <Image source={{ uri: profileImage }} style={styles.profileImage} />
+                  ) : (
+                    <Ionicons name="person" size={40} color="rgba(255,255,255,0.6)" />
+                  )}
+                  <View style={styles.cameraIconBadge}>
+                    <Ionicons name="camera" size={14} color="rgba(255,255,255,0.9)" />
+                  </View>
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.profileNameInput}
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="Your Name"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  maxLength={20}
+                />
               </View>
 
               {/* Divider */}
               <View style={styles.settingsDivider} />
               
-              {/* Background Music Environment Section */}
+              {/* Background Music Section */}
               <View style={styles.settingSection}>
-                <Text style={styles.sectionTitle}>Background Music Environment</Text>
+                <Text style={styles.sectionTitle}>Background Music</Text>
                 
-                {/* Om Sound Radio */}
-                <TouchableOpacity
-                  style={styles.radioItem}
-                  onPress={() => setBackgroundMusic('om')}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.settingLeft}>
-                    <Ionicons 
-                      name="musical-notes-outline" 
-                      size={20} 
-                      color="#ffffff"
-                      style={{ opacity: 0.8 }}
-                    />
-                    <Text style={styles.settingLabel}>Om Sound</Text>
-                  </View>
-                  <View style={[
-                    styles.radio,
-                    backgroundMusic === 'om' && styles.radioActive
-                  ]}>
-                    {backgroundMusic === 'om' && (
-                      <View style={styles.radioDot} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-
-                {/* Ocean Waves Radio */}
+                {/* Ocean Waves */}
                 <TouchableOpacity
                   style={styles.radioItem}
                   onPress={() => setBackgroundMusic('ocean')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.settingLeft}>
-                    <Ionicons 
-                      name="water-outline" 
-                      size={20} 
-                      color="#ffffff"
-                      style={{ opacity: 0.8 }}
-                    />
-                    <Text style={styles.settingLabel}>Ocean Waves</Text>
-                  </View>
+                  <Text style={styles.settingLabel}>Ocean Waves</Text>
                   <View style={[
                     styles.radio,
                     backgroundMusic === 'ocean' && styles.radioActive
@@ -812,22 +820,15 @@ const BreathingCircle = ({
                     )}
                   </View>
                 </TouchableOpacity>
+                <View style={styles.optionDivider} />
 
-                {/* None Radio */}
+                {/* None */}
                 <TouchableOpacity
                   style={styles.radioItem}
                   onPress={() => setBackgroundMusic('none')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.settingLeft}>
-                    <Ionicons 
-                      name="close-circle-outline" 
-                      size={20} 
-                      color="#ffffff"
-                      style={{ opacity: 0.8 }}
-                    />
-                    <Text style={styles.settingLabel}>None</Text>
-                  </View>
+                  <Text style={styles.settingLabel}>None</Text>
                   <View style={[
                     styles.radio,
                     backgroundMusic === 'none' && styles.radioActive
@@ -839,72 +840,78 @@ const BreathingCircle = ({
                 </TouchableOpacity>
               </View>
 
-              {/* Breath Sound Effects Section */}
+              {/* Divider */}
+              <View style={styles.settingsDivider} />
+
+              {/* Sound Effects Section */}
               <View style={styles.settingSection}>
-                <Text style={styles.sectionTitle}>Breath Sound Effects</Text>
+                <Text style={styles.sectionTitle}>Sound Effects</Text>
                 
-                {/* Exhale Sound Toggle */}
+                {/* Om Sound */}
                 <TouchableOpacity
-                  style={styles.settingItem}
+                  style={styles.radioItem}
+                  onPress={() => setOmSoundEnabled(!omSoundEnabled)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.settingLabel}>Om Sound</Text>
+                  <View style={[
+                    styles.radio,
+                    omSoundEnabled && styles.radioActive
+                  ]}>
+                    {omSoundEnabled && (
+                      <View style={styles.radioDot} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.optionDivider} />
+
+                {/* Exhale Sound */}
+                <TouchableOpacity
+                  style={styles.radioItem}
                   onPress={() => setExhaleSoundEnabled(!exhaleSoundEnabled)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.settingLeft}>
-                    <Ionicons 
-                      name="arrow-down-circle-outline" 
-                      size={20} 
-                      color="#ffffff"
-                      style={{ opacity: 0.8 }}
-                    />
-                    <Text style={styles.settingLabel}>Exhale Sound</Text>
-                  </View>
+                  <Text style={styles.settingLabel}>Exhale Sound</Text>
                   <View style={[
-                    styles.toggle,
-                    exhaleSoundEnabled && styles.toggleActive
+                    styles.radio,
+                    exhaleSoundEnabled && styles.radioActive
                   ]}>
-                    <View style={[
-                      styles.toggleThumb,
-                      exhaleSoundEnabled && styles.toggleThumbActive
-                    ]} />
+                    {exhaleSoundEnabled && (
+                      <View style={styles.radioDot} />
+                    )}
                   </View>
                 </TouchableOpacity>
+                <View style={styles.optionDivider} />
 
-                {/* Inhale Sound Toggle */}
+                {/* Inhale Sound */}
                 <TouchableOpacity
-                  style={styles.settingItem}
+                  style={styles.radioItem}
                   onPress={() => setInhaleSoundEnabled(!inhaleSoundEnabled)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.settingLeft}>
-                    <Ionicons 
-                      name="arrow-up-circle-outline" 
-                      size={20} 
-                      color="#ffffff"
-                      style={{ opacity: 0.8 }}
-                    />
-                    <Text style={styles.settingLabel}>Inhale Sound</Text>
-                  </View>
+                  <Text style={styles.settingLabel}>Inhale Sound</Text>
                   <View style={[
-                    styles.toggle,
-                    inhaleSoundEnabled && styles.toggleActive
+                    styles.radio,
+                    inhaleSoundEnabled && styles.radioActive
                   ]}>
-                    <View style={[
-                      styles.toggleThumb,
-                      inhaleSoundEnabled && styles.toggleThumbActive
-                    ]} />
+                    {inhaleSoundEnabled && (
+                      <View style={styles.radioDot} />
+                    )}
                   </View>
                 </TouchableOpacity>
               </View>
 
               {/* Close Button */}
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setShowProfile(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.closeButtonText}>Close</Text>
-              </TouchableOpacity>
-            </GlassView>
+              <GlassView glassEffectStyle="regular" style={styles.closeButtonGlass}>
+                <TouchableOpacity
+                  style={styles.closeButtonInner}
+                  onPress={() => setShowProfile(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.closeButtonText}>Close</Text>
+                </TouchableOpacity>
+              </GlassView>
+            </BlurView>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -1044,10 +1051,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  topRightControls: {
+  topLeftControls: {
     position: 'absolute',
     top: 60,
-    right: 20,
+    left: 20,
     flexDirection: 'column',
     gap: 12,
     zIndex: 100,
@@ -1141,41 +1148,78 @@ const styles = StyleSheet.create({
   settingsMenu: {
     width: width * 0.85,
     maxWidth: 360,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 20,
     overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
-  settingsTitle: {
-    fontSize: 22,
-    fontWeight: '600',
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  profileImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    position: 'relative',
+  },
+  profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileNameInput: {
+    fontSize: 16,
     color: '#ffffff',
-    marginBottom: 24,
     textAlign: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
+    minWidth: 150,
   },
   settingSection: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#ffffff',
-    opacity: 0.6,
+    color: 'rgba(255, 255, 255, 0.6)',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     marginBottom: 12,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 4,
   },
   radioItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 4,
   },
   settingLeft: {
@@ -1184,9 +1228,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingLabel: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '500',
     color: '#ffffff',
-    opacity: 0.9,
+    opacity: 0.85,
+  },
+  optionDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 4,
   },
   toggle: {
     width: 50,
@@ -1227,62 +1277,78 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#ffffff',
   },
+  closeButtonGlass: {
+    marginTop: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 0.3,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  closeButtonInner: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
   closeButton: {
-    marginTop: 8,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginTop: 12,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   closeButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+    letterSpacing: 0.5,
   },
-  profileSectionCompact: {
-    flexDirection: 'row',
+  profileSectionCentered: {
     alignItems: 'center',
-    gap: 16,
-    marginBottom: 16,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
-  profilePicContainerSmall: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  profilePicContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  cameraIconOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileInfo: {
-    flex: 1,
-  },
-  usernameInputInline: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
+  usernameInput: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     color: '#ffffff',
-    marginBottom: 8,
-  },
-  changePictureButtonSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-  },
-  changePictureTextSmall: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 17,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'transparent',
   },
   settingsDivider: {
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginVertical: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 12,
   },
 });
 

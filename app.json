@@ -2,7 +2,7 @@
   "expo": {
     "name": "Transcend.",
     "slug": "transcend-app",
-    "version": "1.0.0",
+    "version": "0.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -49,11 +49,6 @@
           "microphonePermission": false
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "YOUR_PROJECT_ID_HERE"
-      }
-    }
+    ]
   }
 }

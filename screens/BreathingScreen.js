@@ -1,35 +1,75 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Animated } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import BreathingCircle from '../components/BreathingCircle';
 import BreathingControls from '../components/BreathingControls';
 import SessionTimer from '../components/SessionTimer';
 import SessionSummaryModal from '../components/SessionSummaryModal';
-// import SacredGeometryMandala from '../components/SacredGeometryMandala';
 import { useSessionTimer } from '../hooks/useSessionTimer';
-// import { useBreathCycle } from '../hooks/useBreathCycle';
+import ENVIRONMENTS from '../utils/environments';
 
 const { width } = Dimensions.get('window');
 
 const BreathingScreen = () => {
   const [isActive, setIsActive] = useState(false);
-  // const [theme, setTheme] = useState('modern'); // 'modern' or 'thousandPetals'
   const [isMuted, setIsMuted] = useState(false);
   const [isHapticsEnabled, setIsHapticsEnabled] = useState(true);
   const [cycleCount, setCycleCount] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState({ time: '00:00', cycles: 0 });
+  const [environment, setEnvironment] = useState('ocean');
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const { sessionTime, start, stopAndReset } = useSessionTimer();
-  // const { breathPhase, breathProgress, glowIntensity } = useBreathCycle(isActive);
   const duration = 5; // Fixed 5-second duration
-  const videoRef = useRef(null);
+  
+  // Dual video refs for crossfade
+  const primaryVideoRef = useRef(null);
+  const secondaryVideoRef = useRef(null);
+  const [activeVideoIndex, setActiveVideoIndex] = useState(0); // 0 = primary, 1 = secondary
+  const videoOpacity = useRef(new Animated.Value(1)).current;
 
-  // Load and play video on mount
+  // Load and play initial video
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playAsync();
+    if (primaryVideoRef.current) {
+      primaryVideoRef.current.playAsync();
     }
   }, []);
+
+  // Handle environment change with video crossfade
+  const handleEnvironmentChange = async (newEnv) => {
+    if (newEnv === environment || isTransitioning) return;
+    
+    setIsTransitioning(true);
+    
+    try {
+      // Get the inactive video player
+      const inactiveVideoRef = activeVideoIndex === 0 ? secondaryVideoRef : primaryVideoRef;
+      const activeVideoRef = activeVideoIndex === 0 ? primaryVideoRef : secondaryVideoRef;
+      
+      // Load new video in inactive player
+      const newVideo = ENVIRONMENTS[newEnv].video;
+      if (inactiveVideoRef.current) {
+        await inactiveVideoRef.current.unloadAsync();
+        await inactiveVideoRef.current.loadAsync(newVideo, { shouldPlay: true, isLooping: true, isMuted: true });
+      }
+      
+      // Crossfade animation (500ms)
+      Animated.timing(videoOpacity, {
+        toValue: activeVideoIndex === 0 ? 0 : 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start(() => {
+        // Swap active video index
+        setActiveVideoIndex(activeVideoIndex === 0 ? 1 : 0);
+        setEnvironment(newEnv);
+        setIsTransitioning(false);
+      });
+    } catch (error) {
+      console.log('Error switching environment video:', error);
+      setEnvironment(newEnv); // Still update environment for audio
+      setIsTransitioning(false);
+    }
+  };
 
   const handleStart = () => {
     setIsActive(true);
@@ -83,16 +123,30 @@ const BreathingScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Background Video */}
-      <Video
-        ref={videoRef}
-        source={require('../assets/6010489-uhd_2160_3840_25fps.mp4')}
-        style={styles.backgroundVideo}
-        resizeMode={ResizeMode.COVER}
-        isLooping
-        isMuted
-        shouldPlay
-      />
+      {/* Dual Background Videos for Crossfade */}
+      <Animated.View style={[styles.backgroundVideo, { opacity: videoOpacity }]}>
+        <Video
+          ref={primaryVideoRef}
+          source={ENVIRONMENTS[environment].video}
+          style={styles.video}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          isMuted
+          shouldPlay
+        />
+      </Animated.View>
+      
+      <Animated.View style={[styles.backgroundVideo, { opacity: Animated.subtract(1, videoOpacity) }]}>
+        <Video
+          ref={secondaryVideoRef}
+          source={ENVIRONMENTS[environment].video}
+          style={styles.video}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          isMuted
+          shouldPlay={false}
+        />
+      </Animated.View>
 
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
@@ -112,11 +166,11 @@ const BreathingScreen = () => {
         onStart={handleStart}
         onStop={handleStop}
         onCycleComplete={handleCycleComplete}
-        // onThemeToggle={toggleTheme}
-        // currentTheme={theme}
         isMuted={isMuted}
         onMuteToggle={toggleMute}
         isHapticsEnabled={isHapticsEnabled}
+        environment={environment}
+        onEnvironmentChange={handleEnvironmentChange}
       />
 
       {/* Sacred Geometry Mandala - COMMENTED OUT FOR NOW */}
@@ -166,6 +220,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     zIndex: 0,
+  },
+  video: {
+    width: '100%',
+    height: '100%',
   },
   contentOverlay: {
     flex: 1,

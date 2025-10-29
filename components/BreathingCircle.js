@@ -9,6 +9,7 @@ import { BlurView } from 'expo-blur';
 import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
 import * as ImagePicker from 'expo-image-picker';
 import SessionCalendar from './SessionCalendar';
+import ENVIRONMENTS from '../utils/environments';
 
 const { width } = Dimensions.get('window');
 
@@ -24,21 +25,23 @@ const BreathingCircle = ({
   currentTheme = 'modern',
   isMuted = false,
   onMuteToggle,
-  isHapticsEnabled = true
+  isHapticsEnabled = true,
+  environment = 'ocean',
+  onEnvironmentChange
 }) => {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
   const inhaleOpacity = useRef(new Animated.Value(0)).current;
   const exhaleOpacity = useRef(new Animated.Value(0)).current;
+  const environmentSoundsRef = useRef({}); // Store all environment sounds
   const omSoundRef = useRef(null);
-  const oceanSoundRef = useRef(null);
   const exhaleSoundRef = useRef(null);
   const inhaleSoundRef = useRef(null);
   const animationRef = useRef(null);
   const pulseRef = useRef(null);
   const hapticTimeoutsRef = useRef([]);
   const bgMusicShouldBePlaying = useRef(false); // Track if background music should be playing
-  const currentBackgroundMusic = useRef('ocean'); // Track current background music for callbacks
+  const currentEnvironment = useRef('ocean'); // Track current environment for callbacks
   const isInitialMount = useRef(true); // Track initial mount to avoid double-playing
   const [isInhaling, setIsInhaling] = React.useState(false);
   const [isExhaling, setIsExhaling] = React.useState(false);
@@ -46,7 +49,6 @@ const BreathingCircle = ({
   const [showCalendar, setShowCalendar] = useState(false);
   const [username, setUsername] = React.useState('');
   const [profileImage, setProfileImage] = useState(null);
-  const [backgroundMusic, setBackgroundMusic] = React.useState('ocean'); // 'ocean' or 'none'
   const [omSoundEnabled, setOmSoundEnabled] = useState(false);
   const [exhaleSoundEnabled, setExhaleSoundEnabled] = React.useState(true);
   const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
@@ -82,44 +84,36 @@ const BreathingCircle = ({
           require('../assets/omfull.mp3'),
           { 
             shouldPlay: false, 
-            isLooping: false, // Set to false initially, will be set to true when selected
+            isLooping: false,
             volume: 0,
           }
         );
-        
-        // Add status update callback to monitor playback - ONLY restart if om is selected
-        omSound.setOnPlaybackStatusUpdate((status) => {
-          // Only restart if this specific sound should be playing
-          if (status.isLoaded && !status.isPlaying && !status.isBuffering && 
-              bgMusicShouldBePlaying.current && currentBackgroundMusic.current === 'om') {
-            console.log('Om sound stopped unexpectedly, restarting...');
-            omSound.playAsync().catch(err => console.log('Error restarting om sound:', err));
-          }
-        });
-        
         omSoundRef.current = omSound;
 
-        // Load ocean waves sound
-        const { sound: oceanSound } = await Audio.Sound.createAsync(
-          require('../assets/no-copyright-ocean-waves-sound-e.mp3'),
-          { 
-            shouldPlay: false, 
-            isLooping: false, // Set to false initially, will be set to true when selected
-            volume: 0,
+        // Dynamically load all environment sounds
+        for (const [key, env] of Object.entries(ENVIRONMENTS)) {
+          if (env.audio) {
+            const { sound } = await Audio.Sound.createAsync(
+              env.audio,
+              { 
+                shouldPlay: false, 
+                isLooping: false,
+                volume: 0,
+              }
+            );
+            
+            // Add status update callback to monitor playback
+            sound.setOnPlaybackStatusUpdate((status) => {
+              if (status.isLoaded && !status.isPlaying && !status.isBuffering && 
+                  bgMusicShouldBePlaying.current && currentEnvironment.current === key) {
+                console.log(`${env.name} sound stopped unexpectedly, restarting...`);
+                sound.playAsync().catch(err => console.log(`Error restarting ${env.name} sound:`, err));
+              }
+            });
+            
+            environmentSoundsRef.current[key] = sound;
           }
-        );
-        
-        // Add status update callback for ocean sound - ONLY restart if ocean is selected
-        oceanSound.setOnPlaybackStatusUpdate((status) => {
-          // Only restart if this specific sound should be playing
-          if (status.isLoaded && !status.isPlaying && !status.isBuffering && 
-              bgMusicShouldBePlaying.current && currentBackgroundMusic.current === 'ocean') {
-            console.log('Ocean sound stopped unexpectedly, restarting...');
-            oceanSound.playAsync().catch(err => console.log('Error restarting ocean sound:', err));
-          }
-        });
-        
-        oceanSoundRef.current = oceanSound;
+        }
 
         // Load exhale sound effect
         const { sound: exhaleSound } = await Audio.Sound.createAsync(
@@ -153,9 +147,12 @@ const BreathingCircle = ({
       if (omSoundRef.current) {
         omSoundRef.current.unloadAsync();
       }
-      if (oceanSoundRef.current) {
-        oceanSoundRef.current.unloadAsync();
-      }
+      // Unload all environment sounds
+      Object.values(environmentSoundsRef.current).forEach(sound => {
+        if (sound) {
+          sound.unloadAsync();
+        }
+      });
       if (exhaleSoundRef.current) {
         exhaleSoundRef.current.unloadAsync();
       }
@@ -173,15 +170,16 @@ const BreathingCircle = ({
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Update ref to match initial state
-        currentBackgroundMusic.current = backgroundMusic;
+        currentEnvironment.current = environment;
         
-        // Only start if not 'none'
-        if (backgroundMusic === 'ocean' && oceanSoundRef.current) {
+        // Only start if not 'none' and audio exists
+        const envSound = environmentSoundsRef.current[environment];
+        if (environment !== 'none' && envSound) {
           bgMusicShouldBePlaying.current = true;
-          await oceanSoundRef.current.setIsLoopingAsync(true);
-          await oceanSoundRef.current.setVolumeAsync(0);
-          await oceanSoundRef.current.playAsync();
-          await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 1000 });
+          await envSound.setIsLoopingAsync(true);
+          await envSound.setVolumeAsync(0);
+          await envSound.playAsync();
+          await envSound.setVolumeAsync(isMuted ? 0 : 1, { duration: 1000 });
         } else {
           bgMusicShouldBePlaying.current = false;
         }
@@ -217,11 +215,12 @@ const BreathingCircle = ({
   useEffect(() => {
     const updateVolume = async () => {
       try {
-        // Only adjust volume for the currently playing background music
-        if (backgroundMusic === 'ocean' && oceanSoundRef.current && bgMusicShouldBePlaying.current) {
-          const status = await oceanSoundRef.current.getStatusAsync();
+        // Only adjust volume for the currently playing environment music
+        const envSound = environmentSoundsRef.current[environment];
+        if (environment !== 'none' && envSound && bgMusicShouldBePlaying.current) {
+          const status = await envSound.getStatusAsync();
           if (status.isLoaded && status.isPlaying) {
-            await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
+            await envSound.setVolumeAsync(isMuted ? 0 : 1);
           }
         }
         
@@ -250,62 +249,57 @@ const BreathingCircle = ({
     };
     
     updateVolume();
-  }, [isMuted, backgroundMusic, omSoundEnabled, exhaleSoundEnabled, inhaleSoundEnabled]);
+  }, [isMuted, environment, omSoundEnabled, exhaleSoundEnabled, inhaleSoundEnabled]);
 
-  // Handle background music switching with fade
+  // Handle environment switching with fade
   useEffect(() => {
     // Update ref so callbacks always have latest value
-    currentBackgroundMusic.current = backgroundMusic;
+    currentEnvironment.current = environment;
     
-    const switchBackgroundMusic = async () => {
+    const switchEnvironment = async () => {
       // Skip on initial mount (handled by initial background music useEffect)
       if (isInitialMount.current) {
         return;
       }
 
       try {
-        // Fade out and stop all background music first
+        // Fade out and stop all environment sounds
         const fadeOutPromises = [];
         
-        if (omSoundRef.current) {
-          fadeOutPromises.push(
-            omSoundRef.current.setVolumeAsync(0, { duration: 300 })
-              .then(() => omSoundRef.current.stopAsync())
-              .then(() => omSoundRef.current.setPositionAsync(0))
-              .catch(err => console.log('Error fading out om sound:', err))
-          );
-        }
-        if (oceanSoundRef.current) {
-          fadeOutPromises.push(
-            oceanSoundRef.current.setVolumeAsync(0, { duration: 300 })
-              .then(() => oceanSoundRef.current.stopAsync())
-              .then(() => oceanSoundRef.current.setPositionAsync(0))
-              .catch(err => console.log('Error fading out ocean sound:', err))
-          );
-        }
+        Object.values(environmentSoundsRef.current).forEach(sound => {
+          if (sound) {
+            fadeOutPromises.push(
+              sound.setVolumeAsync(0, { duration: 300 })
+                .then(() => sound.stopAsync())
+                .then(() => sound.setPositionAsync(0))
+                .catch(err => console.log('Error fading out environment sound:', err))
+            );
+          }
+        });
         
         await Promise.all(fadeOutPromises);
         
         // Small delay for clean transition
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        // Start the selected background music with fade in
-        if (backgroundMusic === 'ocean' && oceanSoundRef.current) {
+        // Start the selected environment music with fade in
+        const envSound = environmentSoundsRef.current[environment];
+        if (environment !== 'none' && envSound) {
           bgMusicShouldBePlaying.current = true;
-          await oceanSoundRef.current.setIsLoopingAsync(true);
-          await oceanSoundRef.current.setVolumeAsync(0);
-          await oceanSoundRef.current.playAsync();
-          await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 500 });
+          await envSound.setIsLoopingAsync(true);
+          await envSound.setVolumeAsync(0);
+          await envSound.playAsync();
+          await envSound.setVolumeAsync(isMuted ? 0 : 1, { duration: 500 });
         } else {
           bgMusicShouldBePlaying.current = false;
         }
       } catch (error) {
-        console.log('Error switching background music:', error);
+        console.log('Error switching environment:', error);
       }
     };
 
-    switchBackgroundMusic();
-  }, [backgroundMusic]); // Removed isMuted from dependencies to prevent re-triggering on mute toggle
+    switchEnvironment();
+  }, [environment]); // Removed isMuted from dependencies to prevent re-triggering on mute toggle
 
   // Haptic control functions
   const triggerHaptic = (type) => {
@@ -805,44 +799,30 @@ const BreathingCircle = ({
               {/* Divider */}
               <View style={styles.settingsDivider} />
 
-              {/* Background Music Section */}
+              {/* Environment Section */}
               <View style={styles.settingSection}>
-                <Text style={styles.sectionTitle}>Background Music</Text>
+                <Text style={styles.sectionTitle}>Environment</Text>
                 
-                {/* Ocean Waves */}
-                <TouchableOpacity
-                  style={styles.radioItem}
-                  onPress={() => setBackgroundMusic('ocean')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.settingLabel}>Ocean Waves</Text>
-                  <View style={[
-                    styles.radio,
-                    backgroundMusic === 'ocean' && styles.radioActive
-                  ]}>
-                    {backgroundMusic === 'ocean' && (
-                      <View style={styles.radioDot} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.optionDivider} />
-
-                {/* None */}
-                <TouchableOpacity
-                  style={styles.radioItem}
-                  onPress={() => setBackgroundMusic('none')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.settingLabel}>None</Text>
-                  <View style={[
-                    styles.radio,
-                    backgroundMusic === 'none' && styles.radioActive
-                  ]}>
-                    {backgroundMusic === 'none' && (
-                      <View style={styles.radioDot} />
-                    )}
-                  </View>
-                </TouchableOpacity>
+                {Object.entries(ENVIRONMENTS).map(([key, env], index, array) => (
+                  <React.Fragment key={key}>
+                    <TouchableOpacity
+                      style={styles.radioItem}
+                      onPress={() => onEnvironmentChange && onEnvironmentChange(key)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.settingLabel}>{env.name}</Text>
+                      <View style={[
+                        styles.radio,
+                        environment === key && styles.radioActive
+                      ]}>
+                        {environment === key && (
+                          <View style={styles.radioDot} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                    {index < array.length - 1 && <View style={styles.optionDivider} />}
+                  </React.Fragment>
+                ))}
               </View>
 
               {/* Divider */}

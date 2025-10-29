@@ -47,6 +47,7 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
   };
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent={true}
@@ -149,32 +150,46 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
         </View>
       </BlurView>
 
-      {/* Full Screenshot Viewer */}
-      {viewingScreenshot && (
-        <Modal
-          visible={true}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setViewingScreenshot(null)}
+    </Modal>
+
+    {/* Full Screenshot Viewer - Separate Modal */}
+    {viewingScreenshot && (
+      <Modal
+        visible={true}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingScreenshot(null)}
+      >
+        <TouchableOpacity 
+          style={styles.screenshotViewerOverlay}
+          activeOpacity={1}
+          onPress={() => setViewingScreenshot(null)}
         >
-          <BlurView intensity={95} tint="dark" style={styles.screenshotViewerOverlay}>
+          <BlurView intensity={95} tint="dark" style={styles.screenshotViewerBlur}>
             <View style={styles.screenshotViewerContainer}>
               <TouchableOpacity 
                 style={styles.screenshotCloseButton}
                 onPress={() => setViewingScreenshot(null)}
+                activeOpacity={0.8}
               >
                 <Ionicons name="close-circle" size={40} color="rgba(255,255,255,0.9)" />
               </TouchableOpacity>
-              <Image 
-                source={{ uri: viewingScreenshot }} 
-                style={styles.fullScreenshot}
-                resizeMode="contain"
-              />
+              <TouchableOpacity 
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <Image 
+                  source={{ uri: viewingScreenshot }} 
+                  style={styles.fullScreenshot}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
             </View>
           </BlurView>
-        </Modal>
-      )}
-    </Modal>
+        </TouchableOpacity>
+      </Modal>
+    )}
+  </>
   );
 };
 
@@ -354,6 +369,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   screenshotViewerOverlay: {
+    flex: 1,
+  },
+  screenshotViewerBlur: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',

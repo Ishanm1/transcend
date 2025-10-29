@@ -21,6 +21,7 @@
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
     "react-native": "0.81.4",
+    "react-native-emoji-selector": "^0.2.0",
     "react-native-svg": "^15.14.0",
     "react-native-view-shot": "^4.0.3",
     "rn-emoji-keyboard": "^1.7.0"

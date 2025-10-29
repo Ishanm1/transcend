@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal } from 'react-native';
+import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
@@ -28,17 +28,21 @@ const BreathingCircle = ({
   const glowAnim = useRef(new Animated.Value(0)).current;
   const inhaleOpacity = useRef(new Animated.Value(0)).current;
   const exhaleOpacity = useRef(new Animated.Value(0)).current;
-  const soundRef = useRef(null);
+  const omSoundRef = useRef(null);
+  const oceanSoundRef = useRef(null);
   const exhaleSoundRef = useRef(null);
   const inhaleSoundRef = useRef(null);
   const animationRef = useRef(null);
   const pulseRef = useRef(null);
   const hapticTimeoutsRef = useRef([]);
-  const omShouldBePlaying = useRef(false); // Track if om sound should be playing
+  const bgMusicShouldBePlaying = useRef(false); // Track if background music should be playing
+  const currentBackgroundMusic = useRef('ocean'); // Track current background music for callbacks
+  const isInitialMount = useRef(true); // Track initial mount to avoid double-playing
   const [isInhaling, setIsInhaling] = React.useState(false);
   const [isExhaling, setIsExhaling] = React.useState(false);
-  const [showSettings, setShowSettings] = React.useState(false);
-  const [omSoundEnabled, setOmSoundEnabled] = React.useState(true);
+  const [showProfile, setShowProfile] = React.useState(false);
+  const [username, setUsername] = React.useState('');
+  const [backgroundMusic, setBackgroundMusic] = React.useState('ocean'); // 'om', 'ocean', or 'none'
   const [exhaleSoundEnabled, setExhaleSoundEnabled] = React.useState(true);
   const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
   const [showCountdown, setShowCountdown] = React.useState(false);
@@ -68,25 +72,49 @@ const BreathingCircle = ({
           interruptionModeAndroid: 2, // Duck others (allows mixing)
         });
         
-        // Load main breathing audio (om sound)
-        const { sound } = await Audio.Sound.createAsync(
+        // Load om sound
+        const { sound: omSound } = await Audio.Sound.createAsync(
           require('../assets/omfull.mp3'),
           { 
             shouldPlay: false, 
-            isLooping: true,
+            isLooping: false, // Set to false initially, will be set to true when selected
+            volume: 0,
           }
         );
         
-        // Add status update callback to monitor playback and keep it playing continuously
-        sound.setOnPlaybackStatusUpdate((status) => {
-          // If the sound stops unexpectedly while it should be playing, restart it
-          if (status.isLoaded && !status.isPlaying && !status.isBuffering && omShouldBePlaying.current) {
+        // Add status update callback to monitor playback - ONLY restart if om is selected
+        omSound.setOnPlaybackStatusUpdate((status) => {
+          // Only restart if this specific sound should be playing
+          if (status.isLoaded && !status.isPlaying && !status.isBuffering && 
+              bgMusicShouldBePlaying.current && currentBackgroundMusic.current === 'om') {
             console.log('Om sound stopped unexpectedly, restarting...');
-            sound.playAsync().catch(err => console.log('Error restarting om sound:', err));
+            omSound.playAsync().catch(err => console.log('Error restarting om sound:', err));
           }
         });
         
-        soundRef.current = sound;
+        omSoundRef.current = omSound;
+
+        // Load ocean waves sound
+        const { sound: oceanSound } = await Audio.Sound.createAsync(
+          require('../assets/no-copyright-ocean-waves-sound-e.mp3'),
+          { 
+            shouldPlay: false, 
+            isLooping: false, // Set to false initially, will be set to true when selected
+            volume: 0,
+          }
+        );
+        
+        // Add status update callback for ocean sound - ONLY restart if ocean is selected
+        oceanSound.setOnPlaybackStatusUpdate((status) => {
+          // Only restart if this specific sound should be playing
+          if (status.isLoaded && !status.isPlaying && !status.isBuffering && 
+              bgMusicShouldBePlaying.current && currentBackgroundMusic.current === 'ocean') {
+            console.log('Ocean sound stopped unexpectedly, restarting...');
+            oceanSound.playAsync().catch(err => console.log('Error restarting ocean sound:', err));
+          }
+        });
+        
+        oceanSoundRef.current = oceanSound;
 
         // Load exhale sound effect
         const { sound: exhaleSound } = await Audio.Sound.createAsync(
@@ -94,6 +122,7 @@ const BreathingCircle = ({
           { 
             shouldPlay: false, 
             isLooping: false,
+            volume: 1,
           }
         );
         exhaleSoundRef.current = exhaleSound;
@@ -104,6 +133,7 @@ const BreathingCircle = ({
           { 
             shouldPlay: false, 
             isLooping: false,
+            volume: 1,
           }
         );
         inhaleSoundRef.current = inhaleSound;
@@ -115,8 +145,11 @@ const BreathingCircle = ({
     loadAudio();
     
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
+      if (omSoundRef.current) {
+        omSoundRef.current.unloadAsync();
+      }
+      if (oceanSoundRef.current) {
+        oceanSoundRef.current.unloadAsync();
       }
       if (exhaleSoundRef.current) {
         exhaleSoundRef.current.unloadAsync();
@@ -127,9 +160,50 @@ const BreathingCircle = ({
     };
   }, []);
 
+  // Start background music on mount
+  useEffect(() => {
+    const startInitialBackgroundMusic = async () => {
+      try {
+        // Wait a bit for audio to load
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Update ref to match initial state
+        currentBackgroundMusic.current = backgroundMusic;
+        
+        // Only start if not 'none'
+        if (backgroundMusic === 'ocean' && oceanSoundRef.current) {
+          bgMusicShouldBePlaying.current = true;
+          await oceanSoundRef.current.setIsLoopingAsync(true);
+          await oceanSoundRef.current.setVolumeAsync(0);
+          await oceanSoundRef.current.playAsync();
+          await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 1000 });
+        } else if (backgroundMusic === 'om' && omSoundRef.current) {
+          bgMusicShouldBePlaying.current = true;
+          await omSoundRef.current.setIsLoopingAsync(true);
+          await omSoundRef.current.setVolumeAsync(0);
+          await omSoundRef.current.playAsync();
+          await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 1000 });
+        } else {
+          bgMusicShouldBePlaying.current = false;
+        }
+        
+        // Mark that initial mount is complete
+        isInitialMount.current = false;
+      } catch (error) {
+        console.log('Error starting initial background music:', error);
+      }
+    };
+
+    startInitialBackgroundMusic();
+  }, []); // Only run once on mount
+
   // Handle isActive state changes
   useEffect(() => {
-    if (!isActive) {
+    if (isActive) {
+      // Start breathing cycle when session becomes active
+      startBreathingCycle();
+    } else {
+      // Stop and reset when session ends
       stopAnimation();
       progressAnim.setValue(0);
       glowAnim.setValue(0);
@@ -140,46 +214,104 @@ const BreathingCircle = ({
     }
   }, [isActive]);
 
-  // Handle mute/unmute
+  // Handle mute/unmute - only adjust volume for currently playing sounds
   useEffect(() => {
-    if (soundRef.current) {
-      soundRef.current.setVolumeAsync(isMuted ? 0 : 1).catch(error => {
-        console.log('Error setting volume:', error);
-      });
-    }
-    if (exhaleSoundRef.current) {
-      exhaleSoundRef.current.setVolumeAsync(isMuted ? 0 : 1).catch(error => {
-        console.log('Error setting exhale volume:', error);
-      });
-    }
-    if (inhaleSoundRef.current) {
-      inhaleSoundRef.current.setVolumeAsync(isMuted ? 0 : 1).catch(error => {
-        console.log('Error setting inhale volume:', error);
-      });
-    }
-  }, [isMuted]);
-
-  // Handle om sound enable/disable while active
-  useEffect(() => {
-    if (soundRef.current && isActive) {
-      if (omSoundEnabled && omShouldBePlaying.current) {
-        // If enabled and should be playing, ensure it's playing
-        soundRef.current.getStatusAsync().then(status => {
-          if (status.isLoaded && !status.isPlaying) {
-            soundRef.current.playAsync().catch(error => {
-              console.log('Error restarting om sound:', error);
-            });
+    const updateVolume = async () => {
+      try {
+        // Only adjust volume for the currently playing background music
+        if (backgroundMusic === 'om' && omSoundRef.current && bgMusicShouldBePlaying.current) {
+          const status = await omSoundRef.current.getStatusAsync();
+          if (status.isLoaded && status.isPlaying) {
+            await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
           }
-        });
-      } else if (!omSoundEnabled) {
-        // If disabled, stop it
-        omShouldBePlaying.current = false;
-        soundRef.current.stopAsync().catch(error => {
-          console.log('Error stopping om sound:', error);
-        });
+        } else if (backgroundMusic === 'ocean' && oceanSoundRef.current && bgMusicShouldBePlaying.current) {
+          const status = await oceanSoundRef.current.getStatusAsync();
+          if (status.isLoaded && status.isPlaying) {
+            await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
+          }
+        }
+        
+        // Adjust breath sounds volume only if they're loaded (they play on demand)
+        if (exhaleSoundRef.current && exhaleSoundEnabled) {
+          const status = await exhaleSoundRef.current.getStatusAsync();
+          if (status.isLoaded) {
+            await exhaleSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
+          }
+        }
+        if (inhaleSoundRef.current && inhaleSoundEnabled) {
+          const status = await inhaleSoundRef.current.getStatusAsync();
+          if (status.isLoaded) {
+            await inhaleSoundRef.current.setVolumeAsync(isMuted ? 0 : 1);
+          }
+        }
+      } catch (error) {
+        console.log('Error updating volume:', error);
       }
-    }
-  }, [omSoundEnabled, isActive]);
+    };
+    
+    updateVolume();
+  }, [isMuted, backgroundMusic, exhaleSoundEnabled, inhaleSoundEnabled]);
+
+  // Handle background music switching with fade
+  useEffect(() => {
+    // Update ref so callbacks always have latest value
+    currentBackgroundMusic.current = backgroundMusic;
+    
+    const switchBackgroundMusic = async () => {
+      // Skip on initial mount (handled by initial background music useEffect)
+      if (isInitialMount.current) {
+        return;
+      }
+
+      try {
+        // Fade out and stop all background music first
+        const fadeOutPromises = [];
+        
+        if (omSoundRef.current) {
+          fadeOutPromises.push(
+            omSoundRef.current.setVolumeAsync(0, { duration: 300 })
+              .then(() => omSoundRef.current.stopAsync())
+              .then(() => omSoundRef.current.setPositionAsync(0))
+              .catch(err => console.log('Error fading out om sound:', err))
+          );
+        }
+        if (oceanSoundRef.current) {
+          fadeOutPromises.push(
+            oceanSoundRef.current.setVolumeAsync(0, { duration: 300 })
+              .then(() => oceanSoundRef.current.stopAsync())
+              .then(() => oceanSoundRef.current.setPositionAsync(0))
+              .catch(err => console.log('Error fading out ocean sound:', err))
+          );
+        }
+        
+        await Promise.all(fadeOutPromises);
+        
+        // Small delay for clean transition
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Start the selected background music with fade in
+        if (backgroundMusic === 'om' && omSoundRef.current) {
+          bgMusicShouldBePlaying.current = true;
+          await omSoundRef.current.setIsLoopingAsync(true);
+          await omSoundRef.current.setVolumeAsync(0);
+          await omSoundRef.current.playAsync();
+          await omSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 500 });
+        } else if (backgroundMusic === 'ocean' && oceanSoundRef.current) {
+          bgMusicShouldBePlaying.current = true;
+          await oceanSoundRef.current.setIsLoopingAsync(true);
+          await oceanSoundRef.current.setVolumeAsync(0);
+          await oceanSoundRef.current.playAsync();
+          await oceanSoundRef.current.setVolumeAsync(isMuted ? 0 : 1, { duration: 500 });
+        } else {
+          bgMusicShouldBePlaying.current = false;
+        }
+      } catch (error) {
+        console.log('Error switching background music:', error);
+      }
+    };
+
+    switchBackgroundMusic();
+  }, [backgroundMusic]); // Removed isMuted from dependencies to prevent re-triggering on mute toggle
 
   // Haptic control functions
   const triggerHaptic = (type) => {
@@ -457,16 +589,8 @@ const BreathingCircle = ({
     // Clear all haptic timeouts
     clearHapticTimeouts();
     
-    // Stop main audio
-    if (soundRef.current) {
-      try {
-        omShouldBePlaying.current = false; // Mark that om sound should stop
-        await soundRef.current.stopAsync();
-        await soundRef.current.setPositionAsync(0);
-      } catch (error) {
-        console.log('Error stopping audio:', error);
-      }
-    }
+    // Don't stop background music - it continues playing as ambient sound
+    // Background music keeps playing between sessions
     
     // Stop exhale sound
     if (exhaleSoundRef.current) {
@@ -515,19 +639,11 @@ const BreathingCircle = ({
           clearInterval(countdownInterval);
           setShowCountdown(false);
           
-          // Start session
-          onStart(); // Call parent to start timer and set isActive
+          // Start session - this will trigger heart rate measurement, then set isActive
+          onStart(); // Call parent - will show HR measurement first
           
-          // Start main audio from beginning (only once when first pressing) - if enabled
-          if (soundRef.current && omSoundEnabled) {
-            omShouldBePlaying.current = true; // Mark that om sound should be playing
-            soundRef.current.setPositionAsync(0).catch(err => console.log('Error:', err));
-            soundRef.current.setIsLoopingAsync(true).catch(err => console.log('Error:', err));
-            soundRef.current.playAsync().catch(err => console.log('Error:', err));
-          }
-          
-          // Start breathing cycle immediately
-          startBreathingCycle();
+          // Don't start breathing cycle here - wait for isActive to become true
+          // The breathing cycle will start when isActive changes to true
         }
       }, 1000); // 1 second intervals
     }
@@ -562,35 +678,17 @@ const BreathingCircle = ({
 
   return (
     <View style={styles.mainContainer}>
-      {/* Top Right Controls */}
+      {/* Top Right Controls - Vertical Stack */}
       <View style={styles.topRightControls}>
-        {/* Theme Toggle - COMMENTED OUT FOR NOW */}
-        {/* {onThemeToggle && (
-          <GlassView glassEffectStyle="regular" style={styles.glassButton}>
-            <TouchableOpacity
-              onPress={onThemeToggle}
-              activeOpacity={0.7}
-              style={styles.buttonTouchable}
-            >
-              <Ionicons 
-                name={currentTheme === 'modern' ? "flower-outline" : "ellipse-outline"} 
-                size={24} 
-                color="#ffffff"
-                style={{ opacity: 0.8 }}
-              />
-            </TouchableOpacity>
-          </GlassView>
-        )} */}
-        
-        {/* Settings Toggle */}
+        {/* Profile Toggle - Top */}
         <GlassView glassEffectStyle="regular" style={styles.glassButton}>
           <TouchableOpacity
-            onPress={() => setShowSettings(!showSettings)}
+            onPress={() => setShowProfile(!showProfile)}
             activeOpacity={0.7}
             style={styles.buttonTouchable}
           >
             <Ionicons 
-              name="settings-outline" 
+              name="person-outline" 
               size={24} 
               color="#ffffff"
               style={{ opacity: 0.8 }}
@@ -598,7 +696,7 @@ const BreathingCircle = ({
           </TouchableOpacity>
         </GlassView>
         
-        {/* Volume Toggle */}
+        {/* Volume Toggle - Bottom */}
         {onMuteToggle && (
           <GlassView glassEffectStyle="regular" style={styles.glassButton}>
             <TouchableOpacity
@@ -617,104 +715,191 @@ const BreathingCircle = ({
         )}
       </View>
 
-      {/* Settings Modal */}
+      {/* Profile Modal */}
       <Modal
-        visible={showSettings}
+        visible={showProfile}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowSettings(false)}
+        onRequestClose={() => setShowProfile(false)}
       >
         <TouchableOpacity 
           style={styles.modalOverlay} 
           activeOpacity={1}
-          onPress={() => setShowSettings(false)}
+          onPress={() => setShowProfile(false)}
         >
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
             <GlassView glassEffectStyle="regular" style={styles.settingsMenu}>
-              <Text style={styles.settingsTitle}>Audio Settings</Text>
+              <Text style={styles.settingsTitle}>Profile & Settings</Text>
               
-              {/* Om Sound Toggle */}
-              <TouchableOpacity
-                style={styles.settingItem}
-                onPress={() => setOmSoundEnabled(!omSoundEnabled)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.settingLeft}>
+              {/* Profile Section - Compact */}
+              <View style={styles.profileSectionCompact}>
+                <View style={styles.profilePicContainerSmall}>
                   <Ionicons 
-                    name="musical-notes-outline" 
-                    size={20} 
-                    color="#ffffff"
-                    style={{ opacity: 0.8 }}
+                    name="person" 
+                    size={36} 
+                    color="rgba(255,255,255,0.5)"
                   />
-                  <Text style={styles.settingLabel}>Om Sound</Text>
                 </View>
-                <View style={[
-                  styles.toggle,
-                  omSoundEnabled && styles.toggleActive
-                ]}>
-                  <View style={[
-                    styles.toggleThumb,
-                    omSoundEnabled && styles.toggleThumbActive
-                  ]} />
+                <View style={styles.profileInfo}>
+                  <TextInput
+                    style={styles.usernameInputInline}
+                    value={username}
+                    onChangeText={setUsername}
+                    placeholder="Your Name"
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    maxLength={20}
+                  />
+                  <TouchableOpacity style={styles.changePictureButtonSmall}>
+                    <Ionicons name="camera-outline" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.changePictureTextSmall}>Change photo</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
 
-              {/* Exhale Sound Toggle */}
-              <TouchableOpacity
-                style={styles.settingItem}
-                onPress={() => setExhaleSoundEnabled(!exhaleSoundEnabled)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons 
-                    name="arrow-down-circle-outline" 
-                    size={20} 
-                    color="#ffffff"
-                    style={{ opacity: 0.8 }}
-                  />
-                  <Text style={styles.settingLabel}>Exhale Sound</Text>
-                </View>
-                <View style={[
-                  styles.toggle,
-                  exhaleSoundEnabled && styles.toggleActive
-                ]}>
+              {/* Divider */}
+              <View style={styles.settingsDivider} />
+              
+              {/* Background Music Environment Section */}
+              <View style={styles.settingSection}>
+                <Text style={styles.sectionTitle}>Background Music Environment</Text>
+                
+                {/* Om Sound Radio */}
+                <TouchableOpacity
+                  style={styles.radioItem}
+                  onPress={() => setBackgroundMusic('om')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons 
+                      name="musical-notes-outline" 
+                      size={20} 
+                      color="#ffffff"
+                      style={{ opacity: 0.8 }}
+                    />
+                    <Text style={styles.settingLabel}>Om Sound</Text>
+                  </View>
                   <View style={[
-                    styles.toggleThumb,
-                    exhaleSoundEnabled && styles.toggleThumbActive
-                  ]} />
-                </View>
-              </TouchableOpacity>
+                    styles.radio,
+                    backgroundMusic === 'om' && styles.radioActive
+                  ]}>
+                    {backgroundMusic === 'om' && (
+                      <View style={styles.radioDot} />
+                    )}
+                  </View>
+                </TouchableOpacity>
 
-              {/* Inhale Sound Toggle */}
-              <TouchableOpacity
-                style={styles.settingItem}
-                onPress={() => setInhaleSoundEnabled(!inhaleSoundEnabled)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons 
-                    name="arrow-up-circle-outline" 
-                    size={20} 
-                    color="#ffffff"
-                    style={{ opacity: 0.8 }}
-                  />
-                  <Text style={styles.settingLabel}>Inhale Sound</Text>
-                </View>
-                <View style={[
-                  styles.toggle,
-                  inhaleSoundEnabled && styles.toggleActive
-                ]}>
+                {/* Ocean Waves Radio */}
+                <TouchableOpacity
+                  style={styles.radioItem}
+                  onPress={() => setBackgroundMusic('ocean')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons 
+                      name="water-outline" 
+                      size={20} 
+                      color="#ffffff"
+                      style={{ opacity: 0.8 }}
+                    />
+                    <Text style={styles.settingLabel}>Ocean Waves</Text>
+                  </View>
                   <View style={[
-                    styles.toggleThumb,
-                    inhaleSoundEnabled && styles.toggleThumbActive
-                  ]} />
-                </View>
-              </TouchableOpacity>
+                    styles.radio,
+                    backgroundMusic === 'ocean' && styles.radioActive
+                  ]}>
+                    {backgroundMusic === 'ocean' && (
+                      <View style={styles.radioDot} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {/* None Radio */}
+                <TouchableOpacity
+                  style={styles.radioItem}
+                  onPress={() => setBackgroundMusic('none')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons 
+                      name="close-circle-outline" 
+                      size={20} 
+                      color="#ffffff"
+                      style={{ opacity: 0.8 }}
+                    />
+                    <Text style={styles.settingLabel}>None</Text>
+                  </View>
+                  <View style={[
+                    styles.radio,
+                    backgroundMusic === 'none' && styles.radioActive
+                  ]}>
+                    {backgroundMusic === 'none' && (
+                      <View style={styles.radioDot} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Breath Sound Effects Section */}
+              <View style={styles.settingSection}>
+                <Text style={styles.sectionTitle}>Breath Sound Effects</Text>
+                
+                {/* Exhale Sound Toggle */}
+                <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={() => setExhaleSoundEnabled(!exhaleSoundEnabled)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons 
+                      name="arrow-down-circle-outline" 
+                      size={20} 
+                      color="#ffffff"
+                      style={{ opacity: 0.8 }}
+                    />
+                    <Text style={styles.settingLabel}>Exhale Sound</Text>
+                  </View>
+                  <View style={[
+                    styles.toggle,
+                    exhaleSoundEnabled && styles.toggleActive
+                  ]}>
+                    <View style={[
+                      styles.toggleThumb,
+                      exhaleSoundEnabled && styles.toggleThumbActive
+                    ]} />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Inhale Sound Toggle */}
+                <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={() => setInhaleSoundEnabled(!inhaleSoundEnabled)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons 
+                      name="arrow-up-circle-outline" 
+                      size={20} 
+                      color="#ffffff"
+                      style={{ opacity: 0.8 }}
+                    />
+                    <Text style={styles.settingLabel}>Inhale Sound</Text>
+                  </View>
+                  <View style={[
+                    styles.toggle,
+                    inhaleSoundEnabled && styles.toggleActive
+                  ]}>
+                    <View style={[
+                      styles.toggleThumb,
+                      inhaleSoundEnabled && styles.toggleThumbActive
+                    ]} />
+                  </View>
+                </TouchableOpacity>
+              </View>
 
               {/* Close Button */}
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => setShowSettings(false)}
+                onPress={() => setShowProfile(false)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.closeButtonText}>Close</Text>
@@ -863,7 +1048,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     right: 20,
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 12,
     zIndex: 100,
   },
@@ -954,8 +1139,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   settingsMenu: {
-    width: width * 0.8,
-    maxWidth: 320,
+    width: width * 0.85,
+    maxWidth: 360,
     borderRadius: 20,
     padding: 24,
     overflow: 'hidden',
@@ -967,13 +1152,31 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
+  settingSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    opacity: 0.6,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  radioItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -994,7 +1197,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   toggleActive: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
   },
   toggleThumb: {
     width: 26,
@@ -1006,10 +1209,28 @@ const styles = StyleSheet.create({
   toggleThumbActive: {
     transform: [{ translateX: 20 }],
   },
+  radio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioActive: {
+    borderColor: '#ffffff',
+  },
+  radioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+  },
   closeButton: {
-    marginTop: 24,
+    marginTop: 8,
     paddingVertical: 14,
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 12,
     alignItems: 'center',
   },
@@ -1017,6 +1238,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  profileSectionCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 16,
+  },
+  profilePicContainerSmall: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  usernameInputInline: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  changePictureButtonSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+  },
+  changePictureTextSmall: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginVertical: 20,
   },
 });
 

@@ -1071,10 +1071,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Default white opacity
+    backgroundColor: 'rgba(255, 255, 255, 0.05)', // Match breathing circle glass (5% opacity)
   },
   glassButtonForest: {
-    backgroundColor: 'rgba(0, 0, 0, 0.1)', // Black opacity for forest theme
+    backgroundColor: 'rgba(0, 0, 0, 0.05)', // Match breathing circle glass (5% opacity)
   },
   buttonTouchable: {
     width: '100%',

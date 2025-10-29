@@ -713,7 +713,7 @@ const BreathingCircle = ({
       {/* Top Left Controls - Vertical Stack */}
       <View style={styles.topLeftControls}>
         {/* Settings Toggle - Top */}
-        <GlassView glassEffectStyle="regular" style={glassButtonStyle}>
+        <View style={glassButtonStyle}>
           <TouchableOpacity
             onPress={() => setShowProfile(!showProfile)}
             activeOpacity={0.7}
@@ -726,11 +726,11 @@ const BreathingCircle = ({
               style={{ opacity: 0.8 }}
             />
           </TouchableOpacity>
-        </GlassView>
+        </View>
         
         {/* Volume Toggle - Middle */}
         {onMuteToggle && (
-          <GlassView glassEffectStyle="regular" style={glassButtonStyle}>
+          <View style={glassButtonStyle}>
             <TouchableOpacity
               onPress={onMuteToggle}
               activeOpacity={0.7}
@@ -743,7 +743,7 @@ const BreathingCircle = ({
                 style={{ opacity: 0.8 }}
               />
             </TouchableOpacity>
-          </GlassView>
+          </View>
         )}
       </View>
 

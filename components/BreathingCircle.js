@@ -1481,9 +1481,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     letterSpacing: 3,
     textAlign: 'center',
-    textShadowColor: 'rgba(255, 255, 255, 0.8)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 15,
   },
   startButtonContainer: {
     alignItems: 'center',

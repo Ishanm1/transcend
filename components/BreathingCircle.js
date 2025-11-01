@@ -1369,7 +1369,7 @@ const BreathingCircle = ({
                     },
                   ]}
                 >
-                  <Text style={styles.inhaleText}>EXHALE</Text>
+                  <Text style={styles.inhaleText}>exhale</Text>
                 </Animated.View>
               )}
 
@@ -1383,7 +1383,7 @@ const BreathingCircle = ({
                     },
                   ]}
                 >
-                  <Text style={styles.inhaleText}>INHALE</Text>
+                  <Text style={styles.inhaleText}>inhale</Text>
                 </Animated.View>
               )}
 

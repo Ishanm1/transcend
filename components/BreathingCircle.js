@@ -1477,7 +1477,7 @@ const styles = StyleSheet.create({
   inhaleText: {
     fontFamily: 'ClashDisplay-Regular',
     fontSize: 32,
-    fontWeight: '400',
+    fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 4,
     textAlign: 'center',

@@ -21,8 +21,8 @@ const BreathingScreen = () => {
   const [environment, setEnvironment] = useState('ocean');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [userProfile, setUserProfile] = useState({ name: 'Friend', image: null });
-  const [beforeEmojis, setBeforeEmojis] = useState([null, null, null]);
-  const [afterEmojis, setAfterEmojis] = useState([null, null, null]);
+  const [beforeEmojis, setBeforeEmojis] = useState([null, null, null, null, null]);
+  const [afterEmojis, setAfterEmojis] = useState([null, null, null, null, null]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [currentEmojiSlot, setCurrentEmojiSlot] = useState(null);
   const { sessionTime, start, stopAndReset } = useSessionTimer();
@@ -112,6 +112,14 @@ const BreathingScreen = () => {
 
   // Handle press in (touch down) anywhere on screen
   const handlePressIn = () => {
+    // Safety check - don't allow if modal is open
+    if (showSummary || showEmojiPicker) {
+      return;
+    }
+    
+    // Safety check - clear any existing interval first
+    clearCountdown();
+    
     if (isActive) {
       // Already in active session, just track holding
       setIsHolding(true);
@@ -141,6 +149,11 @@ const BreathingScreen = () => {
 
   // Handle press out (touch release) anywhere on screen
   const handlePressOut = () => {
+    // Safety check
+    if (showSummary || showEmojiPicker) {
+      return;
+    }
+    
     setIsHolding(false);
     
     if (isActive) {
@@ -171,14 +184,50 @@ const BreathingScreen = () => {
     };
   }, []);
 
+  // Enhanced cleanup - also clear when summary closes and session is not active
+  useEffect(() => {
+    if (!showSummary && !isActive) {
+      clearCountdown();
+      // Ensure all states are reset
+      if (isHolding || showCountdown) {
+        setIsHolding(false);
+        setShowCountdown(false);
+        setCountdown(3);
+      }
+    }
+  }, [showSummary, isActive]);
+
   const handleCloseSummary = () => {
-    setShowSummary(false);
-    // Reset session data
+    // Force reset all states
+    setIsActive(false);
+    setIsHolding(false);
+    setShowCountdown(false);
+    setCountdown(3);
+    
+    // Clear any running intervals
+    clearCountdown();
+    
+    // Reset timer
     stopAndReset();
+    
+    // Reset cycle count
     setCycleCount(0);
+    
     // Reset emojis
-    setBeforeEmojis([null, null, null]);
-    setAfterEmojis([null, null, null]);
+    setBeforeEmojis([null, null, null, null, null]);
+    setAfterEmojis([null, null, null, null, null]);
+    
+    // Close modal
+    setShowSummary(false);
+    
+    // Small delay to ensure state settles and cleanup any lingering intervals
+    setTimeout(() => {
+      // Verify state is clean - force clear if interval still exists
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    }, 100);
   };
 
   const handleCycleComplete = () => {
@@ -254,6 +303,8 @@ const BreathingScreen = () => {
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={{ flex: 1 }}
+        pointerEvents={showSummary || showEmojiPicker ? 'none' : 'auto'}
+        disabled={showSummary || showEmojiPicker}
       >
         <View style={styles.contentOverlay}>
           {/* Session & Cycle Counter - Only show when active */}

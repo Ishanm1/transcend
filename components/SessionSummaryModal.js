@@ -49,53 +49,53 @@ const getEncouragementMessage = (timeString, cycleCount) => {
   }
 };
 
-// Helper: Get benefits based on session length (only 3)
+// Helper: Get benefits based on session length (deterministic time-based tiers)
 const getBenefitsEarned = (timeString) => {
   const seconds = parseSessionTime(timeString);
   const minutes = Math.floor(seconds / 60);
   
-  // 10+ benefits organized by session length
-  const allBenefits = [
-    // Short sessions (< 2 min)
-    { text: "Moment of mental clarity", minTime: 0, maxTime: 2 },
-    { text: "Quick stress relief", minTime: 0, maxTime: 2 },
-    { text: "Breath awareness developed", minTime: 0, maxTime: 2 },
-    
-    // Medium sessions (2-5 min)
-    { text: "Reduced anxiety", minTime: 2, maxTime: 5 },
-    { text: "Improved focus", minTime: 2, maxTime: 5 },
-    { text: "Calmer nervous system", minTime: 2, maxTime: 5 },
-    { text: "Better breathing control", minTime: 2, maxTime: 5 },
-    
-    // Longer sessions (5-10 min)
-    { text: "Deep relaxation", minTime: 5, maxTime: 10 },
-    { text: "Enhanced mindfulness", minTime: 5, maxTime: 10 },
-    { text: "Emotional balance", minTime: 5, maxTime: 10 },
-    { text: "Better sleep quality", minTime: 5, maxTime: 10 },
-    { text: "Lowered blood pressure", minTime: 5, maxTime: 10 },
-    
-    // Extended sessions (10+ min)
-    { text: "Significant stress reduction", minTime: 10, maxTime: Infinity },
-    { text: "Heightened awareness", minTime: 10, maxTime: Infinity },
-    { text: "Mental resilience boost", minTime: 10, maxTime: Infinity },
-    { text: "Enhanced emotional regulation", minTime: 10, maxTime: Infinity },
-    { text: "Meditation depth achieved", minTime: 10, maxTime: Infinity },
-    { text: "Neural pathway strengthening", minTime: 10, maxTime: Infinity },
-  ];
-  
-  // Filter benefits based on session length
-  const qualifiedBenefits = allBenefits.filter(b => 
-    minutes >= b.minTime && minutes < b.maxTime
-  );
-  
-  // If we have 3 or more, return 3 random ones; otherwise return all
-  if (qualifiedBenefits.length >= 3) {
-    // Shuffle and pick 3
-    const shuffled = [...qualifiedBenefits].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 3);
+  // Tier 1: < 2 minutes (Short Sessions)
+  if (minutes < 2) {
+    return [
+      { text: "Moment of mental clarity" },
+      { text: "Quick stress relief" },
+      { text: "Breath awareness developed" }
+    ];
   }
   
-  return qualifiedBenefits;
+  // Tier 2: 2-4 minutes (Short-Medium Sessions)
+  if (minutes < 5) {
+    return [
+      { text: "Reduced anxiety" },
+      { text: "Improved focus" },
+      { text: "Calmer nervous system" }
+    ];
+  }
+  
+  // Tier 3: 5-9 minutes (Medium Sessions)
+  if (minutes < 10) {
+    return [
+      { text: "Deep relaxation" },
+      { text: "Enhanced mindfulness" },
+      { text: "Emotional balance" }
+    ];
+  }
+  
+  // Tier 4: 10-14 minutes (Long Sessions)
+  if (minutes < 15) {
+    return [
+      { text: "Significant stress reduction" },
+      { text: "Heightened awareness" },
+      { text: "Mental resilience boost" }
+    ];
+  }
+  
+  // Tier 5: 15+ minutes (Extended Sessions)
+  return [
+    { text: "Enhanced emotional regulation" },
+    { text: "Meditation depth achieved" },
+    { text: "Neural pathway strengthening" }
+  ];
 };
 
 // Helper: Format time for display
@@ -134,8 +134,8 @@ const SessionSummaryModal = ({
   cycleCount, 
   onClose,
   userProfile = { initials: 'ME' },
-  beforeEmojis = [null, null, null],
-  afterEmojis = [null, null, null],
+  beforeEmojis = [null, null, null, null, null],
+  afterEmojis = [null, null, null, null, null],
   onEmojiSlotPress = () => {},
 }) => {
   const [showLogConfirmation, setShowLogConfirmation] = useState(false);
@@ -337,7 +337,7 @@ const SessionSummaryModal = ({
           ]}
         >
           <BlurView intensity={100} tint="dark" style={styles.glassContainer}>
-            {/* Header with Profile Picture - Redesigned */}
+            {/* Header with Profile Picture */}
             <View style={styles.headerRedesigned}>
               <View style={styles.profilePic}>
                 {userProfile.image ? (
@@ -348,11 +348,24 @@ const SessionSummaryModal = ({
               </View>
               <View style={styles.textSection}>
                 <Text style={styles.greatWorkText}>
-                  Great work, {userProfile.name || 'Friend'}!
+                  {isAuthenticated && userProfile.name 
+                    ? `Great work, ${userProfile.name}!` 
+                    : 'Great work!'}
                 </Text>
-                <Text style={styles.practiceMessageLeft}>
-                  You practiced mindfulness for
-                </Text>
+                <MaskedView
+                  maskElement={
+                    <Text style={styles.practiceMessageMask}>You practiced mindfulness for</Text>
+                  }
+                >
+                  <LinearGradient
+                    colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)', 'rgba(255, 255, 255, 0.75)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientBackground}
+                  >
+                    <Text style={styles.practiceMessageTransparent}>You practiced mindfulness for</Text>
+                  </LinearGradient>
+                </MaskedView>
                 <MaskedView
                   maskElement={
                     <Text style={styles.timeGradientMask}>{formattedTime}</Text>
@@ -388,7 +401,7 @@ const SessionSummaryModal = ({
             {/* Divider */}
             <View style={styles.divider} />
 
-            {/* Benefits Section - No title */}
+            {/* Benefits Section */}
             <View style={styles.benefitsSection}>
               <View style={styles.benefitsList}>
                 {benefits.map((benefit, index) => (
@@ -417,47 +430,86 @@ const SessionSummaryModal = ({
             {/* Divider */}
             <View style={styles.divider} />
 
-            {/* Emoji Section - Left Aligned with Arrow */}
+            {/* Emoji Section - Two Rows */}
             <View style={styles.emojiSection}>
-              {/* Before Emojis */}
-              <View style={styles.emojiGroup}>
-                {beforeEmojis.map((emoji, index) => (
-                  <GlassView key={`before-${index}`} glassEffectStyle="regular" style={styles.emojiGlassContainer}>
-                    <TouchableOpacity
-                      style={styles.emojiSlot}
-                      onPress={() => onEmojiSlotPress('before', index)}
-                      activeOpacity={0.6}
-                    >
-                      {emoji ? (
-                        <Text style={styles.emojiText}>{emoji}</Text>
-                      ) : (
-                        <Ionicons name="add" size={20} color="rgba(255,255,255,0.3)" />
-                      )}
-                    </TouchableOpacity>
-                  </GlassView>
-                ))}
+              {/* Before Emojis Row */}
+              <View style={styles.emojiRow}>
+                <MaskedView
+                  maskElement={
+                    <Text style={styles.emojiLabelMask}>Before my session</Text>
+                  }
+                >
+                  <LinearGradient
+                    colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)', 'rgba(255, 255, 255, 0.75)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientBackground}
+                  >
+                    <Text style={styles.emojiLabelTransparent}>Before my session</Text>
+                  </LinearGradient>
+                </MaskedView>
+                <View style={styles.emojiGroup}>
+                  {beforeEmojis.map((emoji, index) => (
+                    <GlassView key={`before-${index}`} glassEffectStyle="regular" style={styles.emojiGlassContainer}>
+                      <TouchableOpacity
+                        style={styles.emojiSlot}
+                        onPress={() => {
+                          if (onEmojiSlotPress) {
+                            onEmojiSlotPress('before', index);
+                          }
+                        }}
+                        activeOpacity={0.6}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        {emoji ? (
+                          <Text style={styles.emojiText}>{emoji}</Text>
+                        ) : (
+                          <Ionicons name="add" size={20} color="rgba(255,255,255,0.3)" />
+                        )}
+                      </TouchableOpacity>
+                    </GlassView>
+                  ))}
+                </View>
               </View>
 
-              {/* Arrow */}
-              <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.5)" style={{ marginHorizontal: 8 }} />
-
-              {/* After Emojis */}
-              <View style={styles.emojiGroup}>
-                {afterEmojis.map((emoji, index) => (
-                  <GlassView key={`after-${index}`} glassEffectStyle="regular" style={styles.emojiGlassContainer}>
-                    <TouchableOpacity
-                      style={styles.emojiSlot}
-                      onPress={() => onEmojiSlotPress('after', index)}
-                      activeOpacity={0.6}
-                    >
-                      {emoji ? (
-                        <Text style={styles.emojiText}>{emoji}</Text>
-                      ) : (
-                        <Ionicons name="add" size={20} color="rgba(255,255,255,0.3)" />
-                      )}
-                    </TouchableOpacity>
-                  </GlassView>
-                ))}
+              {/* After Emojis Row */}
+              <View style={styles.emojiRow}>
+                <MaskedView
+                  maskElement={
+                    <Text style={styles.emojiLabelMask}>After my session</Text>
+                  }
+                >
+                  <LinearGradient
+                    colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)', 'rgba(255, 255, 255, 0.75)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientBackground}
+                  >
+                    <Text style={styles.emojiLabelTransparent}>After my session</Text>
+                  </LinearGradient>
+                </MaskedView>
+                <View style={styles.emojiGroup}>
+                  {afterEmojis.map((emoji, index) => (
+                    <GlassView key={`after-${index}`} glassEffectStyle="regular" style={styles.emojiGlassContainer}>
+                      <TouchableOpacity
+                        style={styles.emojiSlot}
+                        onPress={() => {
+                          if (onEmojiSlotPress) {
+                            onEmojiSlotPress('after', index);
+                          }
+                        }}
+                        activeOpacity={0.6}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        {emoji ? (
+                          <Text style={styles.emojiText}>{emoji}</Text>
+                        ) : (
+                          <Ionicons name="add" size={20} color="rgba(255,255,255,0.3)" />
+                        )}
+                      </TouchableOpacity>
+                    </GlassView>
+                  ))}
+                </View>
               </View>
             </View>
 
@@ -527,20 +579,14 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   glassContainer: {
-    backgroundColor: 'transparent', // No fill - blend with blur
+    backgroundColor: 'transparent',
     borderRadius: 4,
     padding: 24,
     overflow: 'hidden',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
   headerRedesigned: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 14,
     marginBottom: 12,
   },
@@ -575,26 +621,37 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   greatWorkText: {
-    fontSize: 18,
-    fontWeight: '500',
+    fontFamily: 'Sacramento_400Regular',
+    fontSize: 24,
     color: '#ffffff',
-    marginBottom: 6,
-    letterSpacing: 0.3,
+    marginBottom: 2,
   },
-  practiceMessageLeft: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    lineHeight: 18,
-    textAlign: 'left',
-  },
-  timeGradientMask: {
+  practiceMessageMask: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.3,
-    marginTop: 4,
+    marginBottom: 2,
+    backgroundColor: 'transparent',
+  },
+  practiceMessageTransparent: {
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    marginBottom: 2,
+    opacity: 0,
+  },
+  timeGradientMask: {
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    marginTop: 0,
     backgroundColor: 'transparent',
   },
   timeGradientTransparent: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.3,
@@ -603,30 +660,6 @@ const styles = StyleSheet.create({
   },
   gradientBackground: {
     paddingVertical: 0,
-  },
-  timeHighlightInline: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 26,
-    color: '#ffffff',
-    marginBottom: 2,
-  },
-  practiceMessage: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    lineHeight: 18,
-  },
-  timeHighlight: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginTop: 4,
   },
   divider: {
     height: 1,
@@ -650,12 +683,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   benefitCheckmark: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 13,
     color: '#ffffff',
     opacity: 0.9,
     marginTop: 2,
   },
   benefitText: {
+    fontFamily: 'Sacramento_400Regular',
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.9)',
     flex: 1,
@@ -663,14 +698,36 @@ const styles = StyleSheet.create({
   },
   emojiSection: {
     paddingVertical: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
+    flexDirection: 'column',
+    gap: 16,
+  },
+  emojiRow: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  emojiLabelMask: {
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    backgroundColor: 'transparent',
+  },
+  emojiLabelTransparent: {
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    opacity: 0,
   },
   emojiGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
   },
   emojiGlassContainer: {
     width: 40,
@@ -687,6 +744,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    pointerEvents: 'box-only',
   },
   emojiText: {
     fontSize: 24,
@@ -725,8 +783,9 @@ const styles = StyleSheet.create({
     minWidth: 260,
   },
   confirmationText: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#ffffff',
     textAlign: 'center',
   },
@@ -744,6 +803,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   confirmButtonText: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
@@ -757,6 +817,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   cancelButtonText: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 16,
     fontWeight: '500',
     color: 'rgba(255, 255, 255, 0.8)',

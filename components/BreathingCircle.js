@@ -1369,7 +1369,7 @@ const BreathingCircle = ({
                     },
                   ]}
                 >
-                  <Text style={styles.inhaleText}>exhale</Text>
+                  <Text style={styles.inhaleText}>Exhale</Text>
                 </Animated.View>
               )}
 
@@ -1383,7 +1383,7 @@ const BreathingCircle = ({
                     },
                   ]}
                 >
-                  <Text style={styles.inhaleText}>inhale</Text>
+                  <Text style={styles.inhaleText}>Inhale</Text>
                 </Animated.View>
               )}
 
@@ -1479,7 +1479,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     color: '#ffffff',
-    letterSpacing: 10,
+    letterSpacing: 3,
     textAlign: 'center',
     textShadowColor: 'rgba(255, 255, 255, 0.3)',
     textShadowOffset: { width: 0, height: 0 },

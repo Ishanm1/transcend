@@ -49,7 +49,11 @@ const GlassCalendar = ({ sessionHistory, onDayPress, onClose }) => {
     // Add current month's days
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const dateKey = date.toISOString().split('T')[0];
+      // Use local date, not UTC - format as YYYY-MM-DD
+      const dateYear = date.getFullYear();
+      const dateMonth = String(date.getMonth() + 1).padStart(2, '0');
+      const dateDay = String(date.getDate()).padStart(2, '0');
+      const dateKey = `${dateYear}-${dateMonth}-${dateDay}`;
       const sessions = sessionHistory[dateKey] || [];
       
       days.push({

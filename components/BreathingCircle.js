@@ -7,7 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { useFonts, Sacramento_400Regular } from '@expo-google-fonts/sacramento';
 import * as ImagePicker from 'expo-image-picker';
 import SessionCalendar from './SessionCalendar';
 import ENVIRONMENTS from '../utils/environments';
@@ -21,6 +22,8 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const BreathingCircle = ({ 
   duration = 5, 
   isActive = false, 
+  showCountdown = false,
+  countdown = 3,
   onCycleComplete,
   onThemeToggle, 
   currentTheme = 'modern',
@@ -70,9 +73,9 @@ const BreathingCircle = ({
   
   const { isAuthenticated, signOut, user, signIn, signUp: signUpUser } = useAuth();
   
-  // Load Allura font
+  // Load Sacramento font
   const [fontsLoaded] = useFonts({
-    Allura_400Regular,
+    Sacramento_400Regular,
   });
 
   const circleSize = width * 0.75;
@@ -1252,7 +1255,39 @@ const BreathingCircle = ({
         {!isActive && fontsLoaded && (
           /* Start Button */
           <View style={styles.startButtonContainer}>
-            <Text style={styles.startButtonText}>Hold to Start Session</Text>
+            {showCountdown ? (
+              <MaskedView
+                maskElement={
+                  <Text style={styles.startButtonText}>exhale in  {countdown}</Text>
+                }
+              >
+                <LinearGradient
+                  colors={['#ffffff', 'rgba(255, 255, 255, 0.6)', '#ffffff']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  locations={[0, 0.5, 1]}
+                  style={styles.gradientBackground}
+                >
+                  <Text style={styles.startButtonTextInvisible}>exhale in  {countdown}</Text>
+                </LinearGradient>
+              </MaskedView>
+            ) : (
+              <MaskedView
+                maskElement={
+                  <Text style={styles.startButtonText}>Hold to Start Session</Text>
+                }
+              >
+                <LinearGradient
+                  colors={['#ffffff', 'rgba(255, 255, 255, 0.6)', '#ffffff']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  locations={[0, 0.5, 1]}
+                  style={styles.gradientBackground}
+                >
+                  <Text style={styles.startButtonTextInvisible}>Hold to Start Session</Text>
+                </LinearGradient>
+              </MaskedView>
+            )}
           </View>
         )}
 
@@ -1440,8 +1475,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   inhaleText: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 32,
-    fontWeight: '700',
+    fontWeight: '400',
     color: '#ffffff',
     letterSpacing: 4,
     textAlign: 'center',
@@ -1451,10 +1487,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   startButtonText: {
-    fontSize: 20,
-    fontWeight: '300',
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 20, // 24 * 0.85 = 20.4, rounded to 20
+    fontWeight: '700', // Make it bold
     letterSpacing: 1,
+    color: '#ffffff',
+  },
+  startButtonTextInvisible: {
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 1,
+    opacity: 0,
+  },
+  gradientBackground: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -1490,7 +1538,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   loginButtonGreeting: {
-    fontFamily: 'Allura_400Regular',
+    fontFamily: 'Sacramento_400Regular',
     fontSize: 20,
     fontWeight: '400',
     textDecorationLine: 'none',
@@ -1687,7 +1735,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   settingLabelCursive: {
-    fontFamily: 'Allura_400Regular',
+    fontFamily: 'Sacramento_400Regular',
     fontSize: 18,
     fontWeight: '400',
   },

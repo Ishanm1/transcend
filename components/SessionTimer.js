@@ -69,8 +69,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   value: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 13,
+    fontWeight: '400',
     color: '#ffffff',
     letterSpacing: 2,
   },

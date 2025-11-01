@@ -8,7 +8,6 @@ import SessionSummaryModal from '../components/SessionSummaryModal';
 import EmojiPickerModal from '../components/EmojiPickerModal';
 import { useSessionTimer } from '../hooks/useSessionTimer';
 import ENVIRONMENTS from '../utils/environments';
-import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
 
 const { width } = Dimensions.get('window');
 
@@ -34,11 +33,6 @@ const BreathingScreen = () => {
   const [showCountdown, setShowCountdown] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const countdownIntervalRef = useRef(null);
-  
-  // Load Allura font
-  const [fontsLoaded] = useFonts({
-    Allura_400Regular,
-  });
   
   // Dual video refs for crossfade
   const primaryVideoRef = useRef(null);
@@ -271,19 +265,12 @@ const BreathingScreen = () => {
             />
           )}
 
-          {/* Countdown Overlay */}
-          {showCountdown && fontsLoaded && (
-            <View style={styles.countdownOverlay}>
-              <Text style={[styles.countdownText, { fontFamily: 'Allura_400Regular' }]}>
-                exhale in   {countdown}
-              </Text>
-            </View>
-          )}
-
           {/* Breathing Circle */}
           <BreathingCircle
             duration={duration}
             isActive={isActive}
+            showCountdown={showCountdown}
+            countdown={countdown}
             onCycleComplete={handleCycleComplete}
             isMuted={isMuted}
             onMuteToggle={toggleMute}
@@ -363,21 +350,6 @@ const styles = StyleSheet.create({
   contentOverlay: {
     flex: 1,
     zIndex: 1,
-  },
-  countdownOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 50,
-  },
-  countdownText: {
-    fontSize: 36,
-    color: '#ffffff',
-    textAlign: 'center',
   },
 });
 

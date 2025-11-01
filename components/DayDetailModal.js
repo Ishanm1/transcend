@@ -12,11 +12,17 @@ import {
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import SessionSummaryModal from './SessionSummaryModal';
+import EmojiPickerModal from './EmojiPickerModal';
 
 const { width } = Dimensions.get('window');
 
 const DayDetailModal = ({ visible, dayData, onClose }) => {
-  const [viewingScreenshot, setViewingScreenshot] = useState(null);
+  const [viewingSession, setViewingSession] = useState(null);
+  const [beforeEmojis, setBeforeEmojis] = useState([null, null, null]);
+  const [afterEmojis, setAfterEmojis] = useState([null, null, null]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [currentEmojiSlot, setCurrentEmojiSlot] = useState(null);
 
   if (!dayData) return null;
 
@@ -44,6 +50,34 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
 
   const getTotalCycles = (sessions) => {
     return sessions.reduce((sum, session) => sum + session.cycles, 0);
+  };
+
+  const handleEmojiSlotPress = (type, index) => {
+    setCurrentEmojiSlot({ type, index });
+    setShowEmojiPicker(true);
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    if (currentEmojiSlot) {
+      if (currentEmojiSlot.type === 'before') {
+        const newEmojis = [...beforeEmojis];
+        newEmojis[currentEmojiSlot.index] = emoji;
+        setBeforeEmojis(newEmojis);
+      } else {
+        const newEmojis = [...afterEmojis];
+        newEmojis[currentEmojiSlot.index] = emoji;
+        setAfterEmojis(newEmojis);
+      }
+    }
+    setShowEmojiPicker(false);
+    setCurrentEmojiSlot(null);
+  };
+
+  const handleCloseSessionSummary = () => {
+    setViewingSession(null);
+    // Reset emojis when closing
+    setBeforeEmojis([null, null, null]);
+    setAfterEmojis([null, null, null]);
   };
 
   return (
@@ -129,7 +163,7 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
                   {session.screenshot && (
                     <TouchableOpacity
                       style={styles.screenshotContainer}
-                      onPress={() => setViewingScreenshot(session.screenshot)}
+                      onPress={() => setViewingSession(session)}
                       activeOpacity={0.8}
                     >
                       <Image 
@@ -152,43 +186,23 @@ const DayDetailModal = ({ visible, dayData, onClose }) => {
 
     </Modal>
 
-    {/* Full Screenshot Viewer - Separate Modal */}
-    {viewingScreenshot && (
-      <Modal
-        visible={true}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setViewingScreenshot(null)}
-      >
-        <TouchableOpacity 
-          style={styles.screenshotViewerOverlay}
-          activeOpacity={1}
-          onPress={() => setViewingScreenshot(null)}
-        >
-          <BlurView intensity={95} tint="dark" style={styles.screenshotViewerBlur}>
-            <View style={styles.screenshotViewerContainer}>
-              <TouchableOpacity 
-                style={styles.screenshotCloseButton}
-                onPress={() => setViewingScreenshot(null)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close-circle" size={40} color="rgba(255,255,255,0.9)" />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                activeOpacity={1}
-                onPress={(e) => e.stopPropagation()}
-              >
-                <Image 
-                  source={{ uri: viewingScreenshot }} 
-                  style={styles.fullScreenshot}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            </View>
-          </BlurView>
-        </TouchableOpacity>
-      </Modal>
-    )}
+    {/* Session Summary Modal */}
+    <SessionSummaryModal
+      visible={viewingSession !== null}
+      sessionTime={viewingSession?.time || '0:00'}
+      cycleCount={viewingSession?.cycles || 0}
+      onClose={handleCloseSessionSummary}
+      beforeEmojis={beforeEmojis}
+      afterEmojis={afterEmojis}
+      onEmojiSlotPress={handleEmojiSlotPress}
+    />
+
+    {/* Emoji Picker Modal */}
+    <EmojiPickerModal
+      visible={showEmojiPicker}
+      onEmojiSelect={handleEmojiSelect}
+      onClose={() => setShowEmojiPicker(false)}
+    />
   </>
   );
 };
@@ -221,10 +235,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dateText: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontFamily: 'ClashDisplay-Regular',
+    fontSize: 22,
+    fontWeight: '400',
     color: '#ffffff',
     marginBottom: 4,
+    letterSpacing: 0.5,
   },
   sessionCountText: {
     fontSize: 14,
@@ -257,8 +273,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statValue: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '400',
     color: '#ffffff',
   },
   statLabel: {
@@ -367,32 +384,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#ffffff',
-  },
-  screenshotViewerOverlay: {
-    flex: 1,
-  },
-  screenshotViewerBlur: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  screenshotViewerContainer: {
-    width: '90%',
-    height: '80%',
-    position: 'relative',
-  },
-  screenshotCloseButton: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 20,
-  },
-  fullScreenshot: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
   },
 });
 

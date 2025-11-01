@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { migrateDateKeysToLocal } from '../utils/sessionStorage';
 import GlassCalendar from './GlassCalendar';
 import DayDetailModal from './DayDetailModal';
 
@@ -23,6 +24,9 @@ const SessionCalendar = ({ visible, onClose }) => {
 
   const loadSessionHistory = async () => {
     try {
+      // Run migration first to fix any UTC date issues
+      await migrateDateKeysToLocal();
+      
       const historyJSON = await AsyncStorage.getItem('sessionHistory');
       if (historyJSON) {
         const history = JSON.parse(historyJSON);

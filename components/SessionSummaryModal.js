@@ -13,14 +13,15 @@ import {
 import { BlurView } from 'expo-blur';
 import { GlassView } from 'expo-glass-effect';
 import { Ionicons } from '@expo/vector-icons';
-import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
+import { useFonts, Sacramento_400Regular } from '@expo-google-fonts/sacramento';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import EmojiSelector from 'react-native-emoji-selector';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import StatCard from './StatCard';
 import { saveSession } from '../utils/sessionStorage';
+import { useAuth } from '../contexts/AuthContext';
+import AuthModal from './AuthModal';
 
 const { width } = Dimensions.get('window');
 
@@ -132,13 +133,14 @@ const SessionSummaryModal = ({
   sessionTime, 
   cycleCount, 
   onClose,
-  userProfile = { initials: 'ME' }
+  userProfile = { initials: 'ME' },
+  beforeEmojis = [null, null, null],
+  afterEmojis = [null, null, null],
+  onEmojiSlotPress = () => {},
 }) => {
-  const [beforeEmojis, setBeforeEmojis] = useState([null, null, null]); // 3 empty slots
-  const [afterEmojis, setAfterEmojis] = useState([null, null, null]); // 3 empty slots
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [currentEmojiSlot, setCurrentEmojiSlot] = useState(null); // { type: 'before'|'after', index: number }
   const [showLogConfirmation, setShowLogConfirmation] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const { isAuthenticated } = useAuth();
   const viewRef = useRef(null);
   
   // Animation values
@@ -147,7 +149,7 @@ const SessionSummaryModal = ({
   const benefitsOpacity = useRef([]).current;
   
   const [fontsLoaded] = useFonts({
-    Allura_400Regular,
+    Sacramento_400Regular,
   });
   
   // Get dynamic content - useMemo to keep benefits static
@@ -217,27 +219,6 @@ const SessionSummaryModal = ({
     }
   }, [visible]); // Only depend on visible to prevent re-animation
 
-  const handleEmojiSlotPress = (type, index) => {
-    setCurrentEmojiSlot({ type, index });
-    setShowEmojiPicker(true);
-  };
-
-  const handleEmojiSelect = (emoji) => {
-    if (currentEmojiSlot) {
-      if (currentEmojiSlot.type === 'before') {
-        const newEmojis = [...beforeEmojis];
-        newEmojis[currentEmojiSlot.index] = emoji;
-        setBeforeEmojis(newEmojis);
-      } else {
-        const newEmojis = [...afterEmojis];
-        newEmojis[currentEmojiSlot.index] = emoji;
-        setAfterEmojis(newEmojis);
-      }
-    }
-    setShowEmojiPicker(false);
-    setCurrentEmojiSlot(null);
-  };
-
   const handleShare = async () => {
     try {
       const uri = await captureRef(viewRef, {
@@ -287,9 +268,6 @@ const SessionSummaryModal = ({
   };
 
   const handleDone = () => {
-    // Reset emojis to empty
-    setBeforeEmojis([null, null, null]);
-    setAfterEmojis([null, null, null]);
     // Exit animation
     Animated.parallel([
       Animated.timing(opacityAnim, {
@@ -335,7 +313,13 @@ const SessionSummaryModal = ({
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.iconButton}
-            onPress={() => setShowLogConfirmation(true)}
+            onPress={() => {
+              if (isAuthenticated) {
+                setShowLogConfirmation(true);
+              } else {
+                setShowAuthModal(true);
+              }
+            }}
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={28} color="rgba(255,255,255,0.9)" />
@@ -441,7 +425,7 @@ const SessionSummaryModal = ({
                   <GlassView key={`before-${index}`} glassEffectStyle="regular" style={styles.emojiGlassContainer}>
                     <TouchableOpacity
                       style={styles.emojiSlot}
-                      onPress={() => handleEmojiSlotPress('before', index)}
+                      onPress={() => onEmojiSlotPress('before', index)}
                       activeOpacity={0.6}
                     >
                       {emoji ? (
@@ -463,7 +447,7 @@ const SessionSummaryModal = ({
                   <GlassView key={`after-${index}`} glassEffectStyle="regular" style={styles.emojiGlassContainer}>
                     <TouchableOpacity
                       style={styles.emojiSlot}
-                      onPress={() => handleEmojiSlotPress('after', index)}
+                      onPress={() => onEmojiSlotPress('after', index)}
                       activeOpacity={0.6}
                     >
                       {emoji ? (
@@ -479,34 +463,6 @@ const SessionSummaryModal = ({
 
           </BlurView>
         </Animated.View>
-
-        {/* Emoji Picker Modal */}
-        {showEmojiPicker && (
-          <Modal
-            visible={showEmojiPicker}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={() => setShowEmojiPicker(false)}
-          >
-            <View style={styles.emojiPickerOverlay}>
-              <View style={styles.emojiPickerContainer}>
-                <View style={styles.emojiPickerHeader}>
-                  <Text style={styles.emojiPickerTitle}>Select Emoji</Text>
-                  <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                    <Ionicons name="close" size={24} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-                <EmojiSelector
-                  onEmojiSelected={handleEmojiSelect}
-                  showSearchBar={false}
-                  showTabs={true}
-                  showHistory={false}
-                  columns={8}
-                />
-              </View>
-            </View>
-          </Modal>
-        )}
 
         {/* Log Session Confirmation Modal */}
         {showLogConfirmation && (
@@ -537,6 +493,17 @@ const SessionSummaryModal = ({
         )}
       </BlurView>
 
+      {/* Auth Modal */}
+      <AuthModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          setShowLogConfirmation(true);
+        }}
+        title="Sign In to Save Sessions"
+        message="Create an account to save your sessions and track your progress over time."
+      />
     </Modal>
   );
 };
@@ -597,8 +564,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileInitials: {
+    fontFamily: 'ClashDisplay-Regular',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '400',
     color: '#ffffff',
     letterSpacing: 1,
   },
@@ -733,30 +701,6 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-  },
-  emojiPickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  emojiPickerContainer: {
-    backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-  },
-  emojiPickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  emojiPickerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
   },
   confirmationOverlay: {
     position: 'absolute',

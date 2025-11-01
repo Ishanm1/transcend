@@ -1479,8 +1479,11 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     color: '#ffffff',
-    letterSpacing: 4,
+    letterSpacing: 10,
     textAlign: 'center',
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   startButtonContainer: {
     alignItems: 'center',

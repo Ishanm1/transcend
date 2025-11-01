@@ -5,7 +5,11 @@ export const saveSession = async (sessionData) => {
   try {
     const { time, cycles, screenshot } = sessionData;
     const now = new Date();
-    const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Use local date, not UTC - format as YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateKey = `${year}-${month}-${day}`;
     const timestamp = now.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit',
@@ -109,6 +113,67 @@ export const clearHistory = async () => {
   } catch (error) {
     console.error('Error clearing history:', error);
     return false;
+  }
+};
+
+// Migrate sessions that were saved with UTC dates to local dates
+export const migrateDateKeysToLocal = async () => {
+  try {
+    const historyJSON = await AsyncStorage.getItem('sessionHistory');
+    if (!historyJSON) return { migrated: 0, success: true };
+    
+    const history = JSON.parse(historyJSON);
+    const migratedHistory = {};
+    let migratedCount = 0;
+    
+    // For each session, check if it was stored under a UTC date
+    Object.entries(history).forEach(([dateKey, sessions]) => {
+      sessions.forEach(session => {
+        if (session.date) {
+          // Parse the stored ISO date
+          const sessionDate = new Date(session.date);
+          
+          // Calculate what the local date key should be
+          const year = sessionDate.getFullYear();
+          const month = String(sessionDate.getMonth() + 1).padStart(2, '0');
+          const day = String(sessionDate.getDate()).padStart(2, '0');
+          const correctDateKey = `${year}-${month}-${day}`;
+          
+          // If the stored date key doesn't match the local date key, migrate it
+          if (dateKey !== correctDateKey) {
+            if (!migratedHistory[correctDateKey]) {
+              migratedHistory[correctDateKey] = [];
+            }
+            migratedHistory[correctDateKey].push(session);
+            migratedCount++;
+            console.log(`Migrating session from ${dateKey} to ${correctDateKey}`);
+          } else {
+            // Keep it as is
+            if (!migratedHistory[dateKey]) {
+              migratedHistory[dateKey] = [];
+            }
+            migratedHistory[dateKey].push(session);
+          }
+        } else {
+          // No date field, keep under current key
+          if (!migratedHistory[dateKey]) {
+            migratedHistory[dateKey] = [];
+          }
+          migratedHistory[dateKey].push(session);
+        }
+      });
+    });
+    
+    // Save the migrated history
+    if (migratedCount > 0) {
+      await AsyncStorage.setItem('sessionHistory', JSON.stringify(migratedHistory));
+      console.log(`Migration complete: ${migratedCount} sessions migrated`);
+    }
+    
+    return { migrated: migratedCount, success: true };
+  } catch (error) {
+    console.error('Error migrating date keys:', error);
+    return { migrated: 0, success: false, error };
   }
 };
 

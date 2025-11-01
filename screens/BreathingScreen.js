@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Animated } from 'react-native';
+import { View, StyleSheet, Dimensions, Animated, Pressable, Text } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import BreathingCircle from '../components/BreathingCircle';
 import BreathingControls from '../components/BreathingControls';
 import SessionTimer from '../components/SessionTimer';
 import SessionSummaryModal from '../components/SessionSummaryModal';
+import EmojiPickerModal from '../components/EmojiPickerModal';
 import { useSessionTimer } from '../hooks/useSessionTimer';
 import ENVIRONMENTS from '../utils/environments';
+import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
 
 const { width } = Dimensions.get('window');
 
@@ -20,8 +22,23 @@ const BreathingScreen = () => {
   const [environment, setEnvironment] = useState('ocean');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [userProfile, setUserProfile] = useState({ name: 'Friend', image: null });
+  const [beforeEmojis, setBeforeEmojis] = useState([null, null, null]);
+  const [afterEmojis, setAfterEmojis] = useState([null, null, null]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [currentEmojiSlot, setCurrentEmojiSlot] = useState(null);
   const { sessionTime, start, stopAndReset } = useSessionTimer();
   const duration = 5; // Fixed 5-second duration
+  
+  // Hold-to-start state
+  const [isHolding, setIsHolding] = useState(false);
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const countdownIntervalRef = useRef(null);
+  
+  // Load Allura font
+  const [fontsLoaded] = useFonts({
+    Allura_400Regular,
+  });
   
   // Dual video refs for crossfade
   const primaryVideoRef = useRef(null);
@@ -85,42 +102,114 @@ const BreathingScreen = () => {
     }
   };
 
-  const handleStart = () => {
-    setIsActive(true);
-    start(); // Start timer from 00:00
-  };
-
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStop = () => {
-    // Capture session data before resetting
-    setSummaryData({
-      time: formatTime(sessionTime), // Format as MM:SS
-      cycles: cycleCount,
-    });
-    
-    // Stop session
-    setIsActive(false);
-    
-    // Show summary modal
-    setShowSummary(true);
-    
-    // Reset will happen when modal closes
+  // Clear countdown interval
+  const clearCountdown = () => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
   };
+
+  // Handle press in (touch down) anywhere on screen
+  const handlePressIn = () => {
+    if (isActive) {
+      // Already in active session, just track holding
+      setIsHolding(true);
+      return;
+    }
+
+    // Not active, start countdown
+    setIsHolding(true);
+    setShowCountdown(true);
+    setCountdown(3);
+    
+    // Start countdown
+    let count = 3;
+    countdownIntervalRef.current = setInterval(() => {
+      count--;
+      if (count > 0) {
+        setCountdown(count);
+      } else {
+        // Countdown finished, start session
+        clearCountdown();
+        setShowCountdown(false);
+        setIsActive(true);
+        start(); // Start timer from 00:00
+      }
+    }, 1000);
+  };
+
+  // Handle press out (touch release) anywhere on screen
+  const handlePressOut = () => {
+    setIsHolding(false);
+    
+    if (isActive) {
+      // In active session, stop and show summary
+      setSummaryData({
+        time: formatTime(sessionTime), // Format as MM:SS
+        cycles: cycleCount,
+      });
+      
+      // Stop session
+      setIsActive(false);
+      stopAndReset();
+      
+      // Show summary modal
+      setShowSummary(true);
+    } else if (showCountdown) {
+      // In countdown, reset it
+      clearCountdown();
+      setShowCountdown(false);
+      setCountdown(3);
+    }
+  };
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      clearCountdown();
+    };
+  }, []);
 
   const handleCloseSummary = () => {
     setShowSummary(false);
     // Reset session data
     stopAndReset();
     setCycleCount(0);
+    // Reset emojis
+    setBeforeEmojis([null, null, null]);
+    setAfterEmojis([null, null, null]);
   };
 
   const handleCycleComplete = () => {
     setCycleCount(prev => prev + 1);
+  };
+
+  const handleEmojiSlotPress = (type, index) => {
+    setCurrentEmojiSlot({ type, index });
+    setShowEmojiPicker(true);
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    if (currentEmojiSlot) {
+      if (currentEmojiSlot.type === 'before') {
+        const newEmojis = [...beforeEmojis];
+        newEmojis[currentEmojiSlot.index] = emoji;
+        setBeforeEmojis(newEmojis);
+      } else {
+        const newEmojis = [...afterEmojis];
+        newEmojis[currentEmojiSlot.index] = emoji;
+        setAfterEmojis(newEmojis);
+      }
+    }
+    setShowEmojiPicker(false);
+    setCurrentEmojiSlot(null);
   };
 
   // const toggleTheme = () => {
@@ -167,30 +256,42 @@ const BreathingScreen = () => {
       </Animated.View>
 
       {/* Content Overlay */}
-      <View style={styles.contentOverlay}>
-        {/* Session & Cycle Counter - Only show when active */}
-        {isActive && (
-          <SessionTimer 
-            time={sessionTime} 
-            cycleCount={cycleCount}
-            circleSize={width * 0.75} 
-          />
-        )}
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={{ flex: 1 }}
+      >
+        <View style={styles.contentOverlay}>
+          {/* Session & Cycle Counter - Only show when active */}
+          {isActive && (
+            <SessionTimer 
+              time={sessionTime} 
+              cycleCount={cycleCount}
+              circleSize={width * 0.75} 
+            />
+          )}
 
-        {/* Breathing Circle */}
-        <BreathingCircle
-        duration={duration}
-        isActive={isActive}
-        onStart={handleStart}
-        onStop={handleStop}
-        onCycleComplete={handleCycleComplete}
-        isMuted={isMuted}
-        onMuteToggle={toggleMute}
-        isHapticsEnabled={isHapticsEnabled}
-        environment={environment}
-        onEnvironmentChange={handleEnvironmentChange}
-        onProfileUpdate={handleProfileUpdate}
-      />
+          {/* Countdown Overlay */}
+          {showCountdown && fontsLoaded && (
+            <View style={styles.countdownOverlay}>
+              <Text style={[styles.countdownText, { fontFamily: 'Allura_400Regular' }]}>
+                exhale in   {countdown}
+              </Text>
+            </View>
+          )}
+
+          {/* Breathing Circle */}
+          <BreathingCircle
+            duration={duration}
+            isActive={isActive}
+            onCycleComplete={handleCycleComplete}
+            isMuted={isMuted}
+            onMuteToggle={toggleMute}
+            isHapticsEnabled={isHapticsEnabled}
+            environment={environment}
+            onEnvironmentChange={handleEnvironmentChange}
+            onProfileUpdate={handleProfileUpdate}
+          />
 
       {/* Sacred Geometry Mandala - COMMENTED OUT FOR NOW */}
       {/* {theme === 'thousandPetals' && (
@@ -209,24 +310,35 @@ const BreathingScreen = () => {
         />
       )} */}
 
-        {/* Controls */}
-        <BreathingControls
-          isActive={isActive}
-        />
+          {/* Controls */}
+          <BreathingControls
+            isActive={isActive}
+          />
 
-        {/* Session Summary Modal */}
-        <SessionSummaryModal
-          visible={showSummary}
-          sessionTime={summaryData.time}
-          cycleCount={summaryData.cycles}
-          onClose={handleCloseSummary}
-          userProfile={{ 
-            name: userProfile.name || 'Friend', 
-            image: userProfile.image,
-            initials: (userProfile.name || 'ME').substring(0, 2).toUpperCase()
-          }}
-        />
-      </View>
+          {/* Session Summary Modal */}
+          <SessionSummaryModal
+            visible={showSummary}
+            sessionTime={summaryData.time}
+            cycleCount={summaryData.cycles}
+            onClose={handleCloseSummary}
+            userProfile={{ 
+              name: userProfile.name || 'Friend', 
+              image: userProfile.image,
+              initials: (userProfile.name || 'ME').substring(0, 2).toUpperCase()
+            }}
+            beforeEmojis={beforeEmojis}
+            afterEmojis={afterEmojis}
+            onEmojiSlotPress={handleEmojiSlotPress}
+          />
+
+          {/* Emoji Picker Modal */}
+          <EmojiPickerModal
+            visible={showEmojiPicker}
+            onEmojiSelect={handleEmojiSelect}
+            onClose={() => setShowEmojiPicker(false)}
+          />
+        </View>
+      </Pressable>
     </View>
   );
 };
@@ -251,6 +363,21 @@ const styles = StyleSheet.create({
   contentOverlay: {
     flex: 1,
     zIndex: 1,
+  },
+  countdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+  },
+  countdownText: {
+    fontSize: 36,
+    color: '#ffffff',
+    textAlign: 'center',
   },
 });
 

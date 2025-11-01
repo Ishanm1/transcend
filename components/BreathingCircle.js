@@ -1,15 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput, Image, ScrollView } from 'react-native';
+import { View, Animated, Dimensions, StyleSheet, TouchableOpacity, Text, Modal, TextInput, Image, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Allura_400Regular } from '@expo-google-fonts/allura';
 import * as ImagePicker from 'expo-image-picker';
 import SessionCalendar from './SessionCalendar';
 import ENVIRONMENTS from '../utils/environments';
+import { useAuth } from '../contexts/AuthContext';
+import AuthModal from './AuthModal';
 
 const { width } = Dimensions.get('window');
 
@@ -18,8 +21,6 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const BreathingCircle = ({ 
   duration = 5, 
   isActive = false, 
-  onStart, 
-  onStop, 
   onCycleComplete,
   onThemeToggle, 
   currentTheme = 'modern',
@@ -53,8 +54,21 @@ const BreathingCircle = ({
   const [omSoundEnabled, setOmSoundEnabled] = useState(false);
   const [exhaleSoundEnabled, setExhaleSoundEnabled] = React.useState(true);
   const [inhaleSoundEnabled, setInhaleSoundEnabled] = React.useState(true);
-  const [showCountdown, setShowCountdown] = React.useState(false);
-  const [countdown, setCountdown] = React.useState(3);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authPromptAction, setAuthPromptAction] = useState(null); // 'name' or 'image'
+  const [showLoginInModal, setShowLoginInModal] = useState(false); // Toggle login view in settings modal
+  
+  // Auth form state
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  const { isAuthenticated, signOut, user, signIn, signUp: signUpUser } = useAuth();
   
   // Load Allura font
   const [fontsLoaded] = useFonts({
@@ -301,6 +315,16 @@ const BreathingCircle = ({
 
     switchEnvironment();
   }, [environment]); // Removed isMuted from dependencies to prevent re-triggering on mute toggle
+
+  // Load user's name from auth when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || '';
+      if (userName && !username) {
+        setUsername(userName);
+      }
+    }
+  }, [isAuthenticated, user]);
 
   // Notify parent of profile updates
   useEffect(() => {
@@ -625,42 +649,6 @@ const BreathingCircle = ({
     exhaleOpacity.setValue(0);
     setIsInhaling(false);
     setIsExhaling(false);
-    setShowCountdown(false);
-    setCountdown(3);
-  };
-
-  const handlePressIn = async () => {
-    if (!isActive && onStart) {
-      // Show countdown
-      setShowCountdown(true);
-      setCountdown(3);
-      
-      // Countdown from 3 to 1
-      let count = 3;
-      const countdownInterval = setInterval(() => {
-        count--;
-        if (count > 0) {
-          setCountdown(count);
-        } else {
-          clearInterval(countdownInterval);
-          setShowCountdown(false);
-          
-          // Start session - this will trigger heart rate measurement, then set isActive
-          onStart(); // Call parent - will show HR measurement first
-          
-          // Don't start breathing cycle here - wait for isActive to become true
-          // The breathing cycle will start when isActive changes to true
-        }
-      }, 1000); // 1 second intervals
-    }
-  };
-
-  const handlePressOut = async () => {
-    if (isActive && onStop) {
-      onStop(); // Call parent to stop & reset timer and set isActive to false
-      // Stop everything
-      await stopAnimation();
-    }
   };
 
 
@@ -683,6 +671,12 @@ const BreathingCircle = ({
   });
 
   const pickImage = async () => {
+    if (!isAuthenticated) {
+      setAuthPromptAction('image');
+      setShowAuthModal(true);
+      return;
+    }
+
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (permissionResult.granted === false) {
@@ -699,6 +693,102 @@ const BreathingCircle = ({
 
     if (!result.canceled) {
       setProfileImage(result.assets[0].uri);
+    }
+  };
+
+  const handleNameFocus = () => {
+    if (!isAuthenticated) {
+      setAuthPromptAction('name');
+      setShowAuthModal(true);
+    }
+  };
+
+  // Auth form validation
+  const validateAuthForm = () => {
+    if (!email || !password) {
+      setError('Please fill in all fields');
+      return false;
+    }
+
+    if (email && !email.includes('@')) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+
+    if (isSignUp) {
+      if (!name.trim()) {
+        setError('Please enter your name');
+        return false;
+      }
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters');
+        return false;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Auth form submit
+  const handleAuthSubmit = async () => {
+    if (!validateAuthForm()) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (isSignUp) {
+        const { data, error: signUpError } = await signUpUser(email, password, name);
+        if (signUpError) {
+          setError(signUpError.message || 'Sign up failed');
+          setIsLoading(false);
+          return;
+        }
+        Alert.alert(
+          'Account Created',
+          'Please check your email to verify your account.',
+          [{ text: 'OK', onPress: () => {
+            setShowLoginInModal(false);
+            resetAuthForm();
+          }}]
+        );
+      } else {
+        const { data, error: signInError } = await signIn(email, password);
+        if (signInError) {
+          setError(signInError.message || 'Sign in failed');
+          setIsLoading(false);
+          return;
+        }
+        setShowLoginInModal(false);
+        resetAuthForm();
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetAuthForm = () => {
+    setEmail('');
+    setPassword('');
+    setName('');
+    setConfirmPassword('');
+    setError(null);
+    setIsSignUp(false);
+    setShowPassword(false);
+  };
+
+  const handleLoginButtonPress = () => {
+    if (isAuthenticated) {
+      signOut();
+    } else {
+      setShowLoginInModal(true);
+      resetAuthForm();
     }
   };
 
@@ -759,6 +849,29 @@ const BreathingCircle = ({
         onClose={() => setShowCalendar(false)}
       />
 
+      {/* Auth Modal */}
+      <AuthModal
+        visible={showAuthModal}
+        onClose={() => {
+          setShowAuthModal(false);
+          setAuthPromptAction(null);
+        }}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          setAuthPromptAction(null);
+          // If they were trying to pick an image, open it after auth
+          if (authPromptAction === 'image') {
+            setTimeout(() => pickImage(), 300);
+          }
+        }}
+        title="Sign In to Customize Profile"
+        message={
+          authPromptAction === 'image'
+            ? "Sign in to add a profile picture and personalize your meditation experience."
+            : "Sign in to add your name and personalize your meditation experience."
+        }
+      />
+
       {/* Profile Modal */}
       <Modal
         visible={showProfile}
@@ -773,11 +886,195 @@ const BreathingCircle = ({
         >
           <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
             <BlurView intensity={100} tint="dark" style={styles.settingsMenu}>
+              {/* Header with Login Button */}
+              <View style={styles.modalHeader}>
+                {!showLoginInModal && (
+                  <TouchableOpacity
+                    onPress={handleLoginButtonPress}
+                    style={styles.loginButtonHeader}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.loginButtonText,
+                      isAuthenticated && fontsLoaded && styles.loginButtonGreeting
+                    ]}>
+                      {isAuthenticated ? 'Welcome!' : 'Login'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {showLoginInModal && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowLoginInModal(false);
+                      resetAuthForm();
+                    }}
+                    style={styles.backButtonHeader}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.9)" />
+                    <Text style={styles.backButtonText}>Back</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <ScrollView 
                 style={styles.settingsScrollView}
+                contentContainerStyle={styles.settingsScrollContent}
                 showsVerticalScrollIndicator={false}
                 bounces={true}
+                keyboardShouldPersistTaps="handled"
               >
+                  {showLoginInModal ? (
+                    /* Login Form View */
+                    <>
+                      {/* Error Message */}
+                      {error && (
+                        <View style={styles.authErrorContainer}>
+                          <Ionicons name="alert-circle" size={18} color="#ff6b6b" />
+                          <Text style={styles.authErrorText}>{error}</Text>
+                        </View>
+                      )}
+
+                      {/* Name Input (Sign Up Only) */}
+                      {isSignUp && (
+                        <>
+                          <Text style={styles.authLabel}>Name</Text>
+                          <GlassView glassEffectStyle="regular" style={styles.authInputContainer}>
+                            <TextInput
+                              style={styles.authInput}
+                              value={name}
+                              onChangeText={setName}
+                              placeholder="Enter your name"
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              autoCapitalize="words"
+                              editable={!isLoading}
+                            />
+                          </GlassView>
+                        </>
+                      )}
+
+                      {/* Email Input */}
+                      <Text style={styles.authLabel}>Email</Text>
+                      <GlassView glassEffectStyle="regular" style={styles.authInputContainer}>
+                        <Ionicons
+                          name="mail-outline"
+                          size={20}
+                          color="rgba(255,255,255,0.6)"
+                          style={styles.authInputIcon}
+                        />
+                        <TextInput
+                          style={styles.authInput}
+                          value={email}
+                          onChangeText={setEmail}
+                          placeholder="Enter your email"
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          editable={!isLoading}
+                        />
+                      </GlassView>
+
+                      {/* Password Input */}
+                      <Text style={styles.authLabel}>Password</Text>
+                      <GlassView glassEffectStyle="regular" style={styles.authInputContainer}>
+                        <Ionicons
+                          name="lock-closed-outline"
+                          size={20}
+                          color="rgba(255,255,255,0.6)"
+                          style={styles.authInputIcon}
+                        />
+                        <TextInput
+                          style={[styles.authInput, styles.authPasswordInput]}
+                          value={password}
+                          onChangeText={setPassword}
+                          placeholder="Enter your password"
+                          placeholderTextColor="rgba(255,255,255,0.4)"
+                          secureTextEntry={!showPassword}
+                          autoCapitalize="none"
+                          editable={!isLoading}
+                        />
+                        <TouchableOpacity
+                          onPress={() => setShowPassword(!showPassword)}
+                          style={styles.authEyeButton}
+                        >
+                          <Ionicons
+                            name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                            size={20}
+                            color="rgba(255,255,255,0.6)"
+                          />
+                        </TouchableOpacity>
+                      </GlassView>
+
+                      {/* Confirm Password (Sign Up Only) */}
+                      {isSignUp && (
+                        <>
+                          <Text style={styles.authLabel}>Confirm Password</Text>
+                          <GlassView glassEffectStyle="regular" style={styles.authInputContainer}>
+                            <Ionicons
+                              name="lock-closed-outline"
+                              size={20}
+                              color="rgba(255,255,255,0.6)"
+                              style={styles.authInputIcon}
+                            />
+                            <TextInput
+                              style={[styles.authInput, styles.authPasswordInput]}
+                              value={confirmPassword}
+                              onChangeText={setConfirmPassword}
+                              placeholder="Confirm your password"
+                              placeholderTextColor="rgba(255,255,255,0.4)"
+                              secureTextEntry={!showPassword}
+                              autoCapitalize="none"
+                              editable={!isLoading}
+                            />
+                          </GlassView>
+                        </>
+                      )}
+
+                      {/* Submit Button */}
+                      <TouchableOpacity
+                        onPress={handleAuthSubmit}
+                        disabled={isLoading}
+                        activeOpacity={0.8}
+                        style={styles.authSubmitButton}
+                      >
+                        <LinearGradient
+                          colors={['#4ADEDB', '#6DD5FA']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.authSubmitGradient}
+                        >
+                          <Text style={styles.authSubmitButtonText}>
+                            {isLoading
+                              ? 'Please wait...'
+                              : isSignUp
+                              ? 'Create Account'
+                              : 'Sign In'}
+                          </Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+
+                      {/* Toggle Sign Up/Sign In */}
+                      <View style={styles.authToggleContainer}>
+                        <Text style={styles.authToggleText}>
+                          {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setIsSignUp(!isSignUp);
+                            setError(null);
+                          }}
+                          disabled={isLoading}
+                        >
+                          <Text style={styles.authToggleLink}>
+                            {isSignUp ? 'Sign In' : 'Sign Up'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    /* Settings View */
+                    <>
                 {/* Profile Section */}
                 <View style={styles.profileHeader}>
                 <TouchableOpacity onPress={pickImage} style={styles.profileImageContainer}>
@@ -793,10 +1090,18 @@ const BreathingCircle = ({
                 <TextInput
                   style={styles.profileNameInput}
                   value={username}
-                  onChangeText={setUsername}
-                  placeholder="Your Name"
+                  onChangeText={(text) => {
+                    if (isAuthenticated) {
+                      setUsername(text);
+                    } else {
+                      handleNameFocus();
+                    }
+                  }}
+                  onFocus={handleNameFocus}
+                  placeholder={isAuthenticated ? "Your Name" : "Sign in to add name"}
                   placeholderTextColor="rgba(255,255,255,0.4)"
                   maxLength={20}
+                  editable={isAuthenticated}
                 />
               </View>
 
@@ -812,7 +1117,7 @@ const BreathingCircle = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.settingLabel}>Session History</Text>
+                <Text style={styles.sectionTitle}>Session History</Text>
                 <Ionicons name="calendar-outline" size={24} color="rgba(255,255,255,0.8)" />
               </TouchableOpacity>
 
@@ -830,7 +1135,10 @@ const BreathingCircle = ({
                       onPress={() => onEnvironmentChange && onEnvironmentChange(key)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.settingLabel}>{env.name}</Text>
+                      <Text style={[
+                        styles.settingLabel,
+                        (env.name === 'Ocean Waves' || env.name === 'Forest Birdsong' || env.name === 'None') && fontsLoaded && styles.settingLabelCursive
+                      ]}>{env.name}</Text>
                       <View style={[
                         styles.radio,
                         environment === key && styles.radioActive
@@ -858,7 +1166,10 @@ const BreathingCircle = ({
                   onPress={() => setOmSoundEnabled(!omSoundEnabled)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.settingLabel}>Om Sound</Text>
+                  <Text style={[
+                    styles.settingLabel,
+                    fontsLoaded && styles.settingLabelCursive
+                  ]}>Om Sound</Text>
                   <View style={[
                     styles.radio,
                     omSoundEnabled && styles.radioActive
@@ -876,7 +1187,10 @@ const BreathingCircle = ({
                   onPress={() => setExhaleSoundEnabled(!exhaleSoundEnabled)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.settingLabel}>Exhale Sound</Text>
+                  <Text style={[
+                    styles.settingLabel,
+                    fontsLoaded && styles.settingLabelCursive
+                  ]}>Exhale Sound</Text>
                   <View style={[
                     styles.radio,
                     exhaleSoundEnabled && styles.radioActive
@@ -894,7 +1208,10 @@ const BreathingCircle = ({
                   onPress={() => setInhaleSoundEnabled(!inhaleSoundEnabled)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.settingLabel}>Inhale Sound</Text>
+                  <Text style={[
+                    styles.settingLabel,
+                    fontsLoaded && styles.settingLabelCursive
+                  ]}>Inhale Sound</Text>
                   <View style={[
                     styles.radio,
                     inhaleSoundEnabled && styles.radioActive
@@ -905,53 +1222,43 @@ const BreathingCircle = ({
                   </View>
                 </TouchableOpacity>
               </View>
-              </ScrollView>
+                    </>
+                  )}
+                </ScrollView>
 
               {/* Close Button */}
-              <GlassView glassEffectStyle="regular" style={styles.closeButtonGlass}>
-                <TouchableOpacity
-                  style={styles.closeButtonInner}
-                  onPress={() => setShowProfile(false)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.closeButtonText}>Close</Text>
-                </TouchableOpacity>
-              </GlassView>
+              {!showLoginInModal && (
+                <GlassView glassEffectStyle="regular" style={styles.closeButtonGlass}>
+                  <TouchableOpacity
+                    style={styles.closeButtonInner}
+                    onPress={() => {
+                      setShowProfile(false);
+                      resetAuthForm();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.closeButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </GlassView>
+              )}
             </BlurView>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
 
-      {/* Start Button or Countdown or Breathing Circle */}
+      {/* Start Button or Breathing Circle */}
       <View style={styles.circleWrapper}>
-        {!isActive && !showCountdown && fontsLoaded && (
+        {!isActive && fontsLoaded && (
           /* Start Button */
-          <TouchableOpacity
-            onPressIn={handlePressIn}
-            activeOpacity={0.8}
-            style={styles.startButtonContainer}
-          >
+          <View style={styles.startButtonContainer}>
             <Text style={styles.startButtonText}>Hold to Start Session</Text>
-          </TouchableOpacity>
-        )}
-
-        {showCountdown && fontsLoaded && (
-          /* Countdown */
-          <View style={styles.countdownContainer}>
-            <Text style={[styles.countdownText, { fontFamily: 'Allura_400Regular' }]}>
-              exhale in   {countdown}
-            </Text>
           </View>
         )}
 
         {isActive && (
           /* Breathing Circle */
-          <TouchableOpacity
-            onPressOut={handlePressOut}
-            activeOpacity={1}
-            style={styles.circleContainer}
-          >
+          <View style={styles.circleContainer}>
             <View style={[styles.circleContainer, { width: circleSize, height: circleSize }]}>
               {/* Static glass ring - visible when active */}
               <View
@@ -1046,7 +1353,7 @@ const BreathingCircle = ({
               )}
 
             </View>
-          </TouchableOpacity>
+          </View>
         )}
       </View>
     </View>
@@ -1149,15 +1456,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
     letterSpacing: 1,
   },
-  countdownContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countdownText: {
-    fontSize: 36,
-    color: '#ffffff',
-    textAlign: 'center',
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -1175,6 +1473,124 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  loginButtonHeader: {
+    paddingVertical: 4,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    textDecorationLine: 'underline',
+  },
+  loginButtonGreeting: {
+    fontFamily: 'Allura_400Regular',
+    fontSize: 20,
+    fontWeight: '400',
+    textDecorationLine: 'none',
+  },
+  backButtonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  authErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  authErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#ff6b6b',
+    lineHeight: 18,
+  },
+  authLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 8,
+    marginTop: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  authInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    minHeight: 52,
+  },
+  authInputIcon: {
+    marginRight: 12,
+  },
+  authInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#ffffff',
+    paddingVertical: 14,
+  },
+  authPasswordInput: {
+    paddingRight: 40,
+  },
+  authEyeButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  authSubmitButton: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  authSubmitGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authSubmitButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  authToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  authToggleText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  authToggleLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4ADEDB',
+  },
   settingsMenu: {
     width: width * 0.85,
     maxWidth: 360,
@@ -1187,7 +1603,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   settingsScrollView: {
-    maxHeight: 480, // Allow content to scroll within the modal
+    maxHeight: 500,
+  },
+  settingsScrollContent: {
+    paddingBottom: 20,
   },
   profileHeader: {
     alignItems: 'center',
@@ -1236,7 +1655,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '400',
     color: 'rgba(255, 255, 255, 0.6)',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
@@ -1266,6 +1685,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#ffffff',
     opacity: 0.85,
+  },
+  settingLabelCursive: {
+    fontFamily: 'Allura_400Regular',
+    fontSize: 18,
+    fontWeight: '400',
   },
   optionDivider: {
     height: 1,
